@@ -165,14 +165,20 @@ export class Application {
 			const { headers } = req;
 			const cookies = parseCookie(req);
 
-			await responseHandler(res, null, endpoint.handler.call(controller, {
+			let responseBody = endpoint.handler.call(controller, {
 				auth,
 				body,
 				query,
 				params,
 				headers,
 				cookies,
-			}, controller));
+			}, controller);
+
+			if (responseBody instanceof Promise) {
+				responseBody = await responseBody;
+			}
+
+			await responseHandler(res, null, responseBody);
 		})()
 			.catch(err => this.responseHandler(res, err, undefined));
 	};
