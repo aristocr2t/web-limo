@@ -99,7 +99,7 @@ export interface ControllerOptions {
 }
 
 export interface EndpointOptions {
-	path?: string;
+	path?: string | (string | RegExp)[];
 	method?: HttpMethod | HttpMethod[];
 	query?: ValidationSchema;
 	body?: ValidationSchema;
