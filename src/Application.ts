@@ -132,6 +132,8 @@ export class Application {
 				throw new Error('404');
 			}
 
+			params = Array.from(params).slice(1);
+
 			if (await this.resolveMiddlewares(req, res, endpoint.middleware as MiddlewareType[])) {
 				return;
 			}
