@@ -1,0 +1,60 @@
+{
+	"name": "web-limo",
+	"version": "3.0.0",
+	"description": "node.js mvc server framework",
+	"main": "index.js",
+	"typings": "index.d.ts",
+	"scripts": {
+		"prebuild": "rimraf dist/ node_modules/web-limo",
+		"build": "tsc --diagnostics && cp -r dist node_modules/web-limo",
+		"prepublish": "npm run build && node publish.js && cd dist/",
+		"test": "jest --runInBand --detectOpenHandles",
+		"test:cov": "jest --coverage",
+		"test:debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
+		"fix": "eslint \"src/**/*.ts\" --fix --ext .ts",
+		"lint": "eslint \"src/**/*.ts\" -f codeframe"
+	},
+	"dependencies": {
+		"content-type": "^1.0.4",
+		"formidable": "^1.2.2",
+		"http": "0.0.1-security",
+		"mime": "^2.4.6",
+		"querystring": "^0.2.0",
+		"raw-body": "^2.4.1",
+		"util": "^0.12.3"
+	},
+	"devDependencies": {
+		"@types/content-type": "^1.1.3",
+		"@types/formidable": "^1.0.31",
+		"@types/mime": "^2.0.2",
+		"@typescript-eslint/eslint-plugin": "^3.2.0",
+		"@typescript-eslint/parser": "^3.2.0",
+		"eslint": "^7.2.0",
+		"eslint-plugin-import": "^2.21.2",
+		"fs": "0.0.1-security",
+		"jest": "^26.0.1",
+		"rimraf": "^3.0.2",
+		"ts-jest": "^26.1.0",
+		"typescript": "^3.9.5"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "Shamil Sultanov",
+		"email": "shamil.amirovich@gmail.com",
+		"url": "http://sultanov.io"
+	},
+	"keywords": [
+		"nodejs",
+		"mvc",
+		"server",
+		"framework"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/aristocr2t/web-limo.git"
+	},
+	"bugs": {
+		"url": "https://github.com/aristocr2t/web-limo/issues"
+	},
+	"homepage": "https://github.com/aristocr2t/web-limo#readme"
+}
