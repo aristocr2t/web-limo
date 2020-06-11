@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import contentType from 'content-type';
-import { File, IncomingForm } from 'formidable';
+import * as contentType from 'content-type';
+import { IncomingForm } from 'formidable';
 import { IncomingMessage } from 'http';
-import qs from 'querystring';
-import rawBody from 'raw-body';
+import * as qs from 'querystring';
+import * as rawBody from 'raw-body';
 
 export function snakeCase(value: string): string {
 	return value ? value.replace(/(?:[^\w\d]+)?([A-Z]+)/g, (fm, m: string) => `_${m.toLowerCase()}`).replace(/^_/, '') : '';
@@ -70,6 +70,17 @@ export function isEqual(a: any, b: any, checkPrototype: boolean = false): boolea
 	}
 
 	return false;
+}
+
+export interface File {
+	size: number;
+	path: string;
+	name: string;
+	type: string;
+	lastModifiedDate?: Date;
+	hash?: string;
+
+	toJSON(): Object;
 }
 
 export function parseMultipart(req: IncomingMessage): Promise<MultipartData> {

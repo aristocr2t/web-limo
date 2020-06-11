@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { IncomingHttpHeaders, IncomingMessage, Server, ServerOptions, ServerResponse, createServer } from 'http';
-import qs from 'querystring';
+import * as qs from 'querystring';
 
 import { ControllerOptions, EndpointOptions, HttpMethod, ResponseHandler } from './Controller';
 import { BodyOptions, Cookies, parseBody, parseCookie } from './utils';
