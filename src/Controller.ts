@@ -11,7 +11,7 @@ export function Controller(options?: ControllerOptions): ClassDecorator {
 		options = options ?? {};
 
 		options.method = [options.method || 'GET'].flat().filter(Boolean) as HttpMethod[];
-		options.useMethodNames = options.useMethodNames ?? true;
+		options.useMethodNames = options.useMethodNames ?? false;
 		options.path = options.path ?? parseName(target.name, 'Controller');
 		options.authHandler = options.authHandler ?? undefined;
 		options.middleware = [options.middleware].flat().filter(Boolean) as MiddlewareType[];
@@ -43,7 +43,7 @@ export function Controller(options?: ControllerOptions): ClassDecorator {
 				: [endpoint.path!]
 					.flat()
 					.filter(Boolean)
-					.map((p: RegExp | string) => (p instanceof RegExp ? `(${p.source.replace(/(^\^)|(\$)\||\|(\^)|(\$$))/g, '')})` : p))
+					.map((p: RegExp | string) => (p instanceof RegExp ? `(${p.source.replace(/(?:^(\^))|(?:(\$)\|)|(?:\|(\^))|(?:(\$)$)/g, '')})` : p))
 					.join('/');
 
 			const location
