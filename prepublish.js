@@ -1,3 +1,8 @@
+if (!process.env.RELEASE_MODE) {
+	console.log('Run `npm run release` to publish the package');
+	process.exit(1);
+}
+
 const { writeFileSync, readFileSync, copyFileSync } = require('fs');
 
 const packageJson = JSON.parse(readFileSync('package.json').toString());
