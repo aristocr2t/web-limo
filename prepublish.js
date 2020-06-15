@@ -3,7 +3,7 @@ if (!process.env.RELEASE_MODE) {
 	process.exit(1);
 }
 
-const { writeFileSync, readFileSync, copyFileSync } = require('fs');
+const { writeFileSync, readFileSync, copyFileSync, unlinkSync, existsSync } = require('fs');
 
 const packageJson = JSON.parse(readFileSync('package.json').toString());
 
@@ -15,4 +15,8 @@ const copyingFiles = ['LICENSE', 'README.md'];
 
 for (const cf of copyingFiles) {
 	copyFileSync(cf, `dist/${cf}`);
+}
+
+if (existsSync('dist/tsconfig.tsbuildinfo')) {
+	unlinkSync('dist/tsconfig.tsbuildinfo');
 }

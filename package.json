@@ -1,6 +1,6 @@
 {
 	"name": "web-limo",
-	"version": "3.0.0-alpha7",
+	"version": "3.0.1",
 	"description": "node.js mvc server framework",
 	"main": "index.js",
 	"typings": "index.d.ts",
@@ -35,6 +35,9 @@
 		"rimraf": "^3.0.2",
 		"ts-jest": "^26.1.0",
 		"typescript": "^3.9.5"
+	},
+	"engines": {
+		"node": ">=8.0.0"
 	},
 	"license": "MIT",
 	"author": {
