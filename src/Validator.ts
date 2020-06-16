@@ -3,6 +3,8 @@ import { inspect } from 'util';
 
 import { isEqual } from './utils';
 
+export const HIDDEN_SPACES = '\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF';
+
 export class ValidationError extends Error {
 	constructor(
 		readonly propertyPath: string | undefined,
@@ -103,16 +105,16 @@ export class Validator {
 		return num;
 	}
 
-	private static bigint(x: any, rule: Partial<BigintValidationRule>, propertyPath: string): bigint | null {
-		if (!isFinite(x)) {
+	private static bigint(x: unknown, rule: Partial<BigintValidationRule>, propertyPath: string): bigint | null {
+		if (!isFinite(x as number)) {
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
 		const num = BigInt(x);
 
 		if (
-			(isFinite(rule.min?.toString() as any as number) && num < (rule.min!))
-			|| (isFinite(rule.max?.toString() as any as number) && num > (rule.max!))
+			(isFinite(rule.min?.toString() as unknown as number) && num < (rule.min!))
+			|| (isFinite(rule.max?.toString() as unknown as number) && num > (rule.max!))
 		) {
 			throw new ValidationError(propertyPath, x, rule);
 		}
@@ -120,7 +122,7 @@ export class Validator {
 		return num;
 	}
 
-	private static string(x: any, rule: Partial<StringValidationRule>, propertyPath: string): string {
+	private static string(x: unknown, rule: Partial<StringValidationRule>, propertyPath: string): string {
 		if (typeof x !== 'string') {
 			if (typeof x === 'number') {
 				return x.toString();
@@ -143,11 +145,22 @@ export class Validator {
 			return rule.custom(x, rule);
 		}
 
-		return x;
+		if (rule.trim) {
+			x = (x as string).trim();
+		}
+
+		if (rule.escape) {
+			x = (x as string)
+				.replace(/[\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF]+\n/g, '\n')
+				.replace(/\n[\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF]+/g, '\n')
+				.replace(/[\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF]+/g, ' ');
+		}
+
+		return x as string;
 	}
 
-	private static date(x: any, rule: Partial<DateValidationRule>, propertyPath: string): Date | string | null {
-		const date: Date = new Date(x);
+	private static date(x: unknown, rule: Partial<DateValidationRule>, propertyPath: string): Date | string | null {
+		const date: Date = new Date(x as Date);
 
 		if (isNaN(+date)) {
 			throw new ValidationError(propertyPath, x, rule);
@@ -273,6 +286,8 @@ export interface StringValidationRule extends DefaultValidationRule {
 	pattern?: string | RegExp;
 	number?: boolean;
 	integer?: boolean;
+	trim?: boolean;
+	escape?: boolean;
 	custom?(x: any, rule: Partial<StringValidationRule>): string;
 	[key: string]: any;
 }
