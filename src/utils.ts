@@ -103,7 +103,7 @@ export async function parseBody(
 	req: IncomingMessage,
 	options: BodyOptions,
 ): Promise<string | Buffer | JsonData | UrlencodedData | MultipartData | IncomingMessage> {
-	if (req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH') {
+	if (req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH' && !req.headers['content-type']) {
 		return null;
 	}
 

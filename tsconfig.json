@@ -14,7 +14,7 @@
 		"outDir": "./dist",
 		"removeComments": true,
 		"resolveJsonModule": true,
-		"sourceMap": true,
+		"sourceMap": false,
 		"strict": true,
 		"target": "es5"
 	},
