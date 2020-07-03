@@ -79,19 +79,25 @@ type Schema<B> = {
 };
 
 export function Endpoint<
-	Query extends ValidationSchema = ValidationSchema,
-	Body extends ValidationSchema = ValidationSchema,
-	BodyRule extends ValidationRule = ValidationRule,
->(options: EndpointOptions): <Method extends (requestData: RequestData<Schema<Query>, any, Schema<Body> | { [key: string]: SchemaProp<BodyRule> }>) => any>(
+	Options extends EndpointOptions,
+	Query = Options['query'],
+	Body = Options['body'],
+	BodyRule = Options['bodyRule']
+>(options: Options): <
+	Method extends (
+		requestData: RequestData<
+		any,
+		Query extends ValidationSchema ? Schema<Query> : any,
+		Body extends ValidationSchema ? Schema<Body> : (BodyRule extends ValidationRule ? SchemaProp<BodyRule> : any)
+		>,
+		context: any,
+	) => any | PromiseLike<any>,
+>(
 	target: {},
 	propertyKey: string,
 	descriptor: TypedPropertyDescriptor<Method>,
 ) => TypedPropertyDescriptor<Method> | void {
-	return <Method extends (requestData: RequestData<Schema<Query>, any, Schema<Body> | { [key: string]: SchemaProp<BodyRule> }>) => any>(
-		target: { [key: string]: any },
-		propertyKey: string,
-		descriptor: TypedPropertyDescriptor<Method>,
-	): TypedPropertyDescriptor<Method> | void => {
+	return (target, propertyKey, descriptor) => {
 		(options as $Endpoint).handler = target[propertyKey as keyof typeof target];
 
 		if (options.body) {

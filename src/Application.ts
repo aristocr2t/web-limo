@@ -156,11 +156,13 @@ export class Application {
 
 				let body: any = await parseBody(req, this.options.bodyOptions as BodyOptions);
 
-				if (endpoint.body || endpoint.bodyRule) {
-					body = validate(body, endpoint.bodyRule || {
+				if (endpoint.body) {
+					body = validate(body, {
 						type: 'object',
 						schema: endpoint.body,
 					}, 'body') as any;
+				} else if (endpoint.bodyRule) {
+					body = validate(body, endpoint.bodyRule, 'body') as any;
 				}
 
 				const { headers } = req;
@@ -209,7 +211,7 @@ type $Endpoint = EndpointOptions & {
 
 export type MiddlewareType = (req: IncomingMessage, res: ServerResponse) => boolean | PromiseLike<boolean>;
 export type ControllerType = string | (new () => any);
-export interface RequestData<Query extends {} = {}, Auth = any, Body = any> {
+export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
 	body: Body;
 	query: Query;
 	params: string[];
