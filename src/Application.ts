@@ -93,7 +93,7 @@ export class Application {
 
 	private async resolveMiddlewares(req: IncomingMessage, res: ServerResponse, middlewares: MiddlewareType[]): Promise<boolean> {
 		for (const m of middlewares) {
-			let response = typeof m === 'function' ? m(req, res) : m.handle(req, res);
+			let response = m(req, res);
 
 			if (response instanceof Promise) {
 				response = await response;
@@ -116,72 +116,71 @@ export class Application {
 	};
 
 	private readonly requestHandler = (req: IncomingMessage, res: ServerResponse): void => {
-		(async () => {
-			let { responseHandler } = this;
+		Promise.resolve(this.responseHandler)
+			.then(async (responseHandler) => {
+				if (await this.resolveMiddlewares(req, res, this.options.middlewares!)) {
+					return;
+				}
 
-			if (await this.resolveMiddlewares(req, res, this.options.middlewares!)) {
-				return;
-			}
+				const [location, querystring] = (req.url || '').split('?', 1) as [string, string?];
 
-			const [location, querystring] = (req.url || '').split('?', 1) as [string, string?];
+				let params!: string[];
+				const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
 
-			let params!: string[];
-			const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
+				if (!endpoint || !endpoint.method.includes(req.method! as HttpMethod)) {
+					throw new Error('404');
+				}
 
-			if (!endpoint || !endpoint.method.includes(req.method! as HttpMethod)) {
-				throw new Error('404');
-			}
+				params = Array.from(params).slice(1);
 
-			params = Array.from(params).slice(1);
+				if (await this.resolveMiddlewares(req, res, endpoint.middleware as MiddlewareType[])) {
+					return;
+				}
 
-			if (await this.resolveMiddlewares(req, res, endpoint.middleware as MiddlewareType[])) {
-				return;
-			}
+				if (endpoint.responseHandler) {
+					responseHandler = endpoint.responseHandler;
+				}
 
-			if (endpoint.responseHandler) {
-				responseHandler = endpoint.responseHandler;
-			}
+				const controller = new endpoint.controller();
 
-			const controller = new endpoint.controller();
+				if (endpoint.contextResolver) {
+					Object.assign(controller, endpoint.contextResolver(req, res));
+				}
 
-			if (endpoint.contextResolver) {
-				Object.assign(controller, endpoint.contextResolver(req, res));
-			}
+				const auth = endpoint.authHandler ? await endpoint.authHandler(req, res) : null;
 
-			const auth = endpoint.authHandler ? await endpoint.authHandler(req, res) : null;
-
-			const query = validate(qs.parse(querystring || ''), {
-				type: 'object',
-				schema: endpoint.query,
-			}, 'query') as Record<string, any>;
-
-			let body: any = await parseBody(req, this.options.bodyOptions as BodyOptions);
-
-			if (endpoint.body || endpoint.bodyRule) {
-				body = validate(body, endpoint.bodyRule || {
+				const query = validate(qs.parse(querystring || ''), {
 					type: 'object',
-					schema: endpoint.body,
-				}, 'body') as any;
-			}
+					schema: endpoint.query,
+				}, 'query') as Record<string, any>;
 
-			const { headers } = req;
-			const cookies = parseCookie(req);
+				let body: any = await parseBody(req, this.options.bodyOptions as BodyOptions);
 
-			let responseBody = endpoint.handler.call(controller, {
-				auth,
-				body,
-				query,
-				params,
-				headers,
-				cookies,
-			}, controller);
+				if (endpoint.body || endpoint.bodyRule) {
+					body = validate(body, endpoint.bodyRule || {
+						type: 'object',
+						schema: endpoint.body,
+					}, 'body') as any;
+				}
 
-			if (responseBody instanceof Promise) {
-				responseBody = await responseBody;
-			}
+				const { headers } = req;
+				const cookies = parseCookie(req);
 
-			await responseHandler(res, null, responseBody);
-		})()
+				let responseBody = endpoint.handler.call(controller, {
+					auth,
+					body,
+					query,
+					params,
+					headers,
+					cookies,
+				}, controller);
+
+				if (responseBody instanceof Promise) {
+					responseBody = await responseBody;
+				}
+
+				await responseHandler(res, null, responseBody);
+			})
 			.catch(err => this.responseHandler(res, err, undefined));
 	};
 }
@@ -208,16 +207,15 @@ type $Endpoint = EndpointOptions & {
 	contextResolver?(req: IncomingMessage, res: ServerResponse): Record<string, any>;
 };
 
-export type MiddlewareType = ((req: IncomingMessage, res: ServerResponse) => (boolean | PromiseLike<boolean>))
-| { handle(req: IncomingMessage, res: ServerResponse): (boolean | PromiseLike<boolean>) };
-export type ControllerType = string | ((new () => any));
-export interface RequestData<B = any, Q extends {} = {}, A = any> {
-	body: B;
-	query: Q;
+export type MiddlewareType = (req: IncomingMessage, res: ServerResponse) => boolean | PromiseLike<boolean>;
+export type ControllerType = string | (new () => any);
+export interface RequestData<Query extends {} = {}, Auth = any, Body = any> {
+	body: Body;
+	query: Query;
 	params: string[];
 	cookies: Cookies;
 	headers: IncomingHttpHeaders;
-	auth: A | null;
+	auth: Auth | null;
 }
 export type EndpointHandler = (request: RequestData, context: Record<string, any>) => any | PromiseLike<any>;
 

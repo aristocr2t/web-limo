@@ -1,12 +1,11 @@
 import { IncomingMessage, ServerResponse } from 'http';
 
-import { EndpointHandler, MiddlewareType } from './Application';
+import { EndpointHandler, MiddlewareType, RequestData } from './Application';
 import { SetMetadata, parseName } from './utils';
-import { ValidationRule, ValidationSchema } from './Validator';
+import { ArrayValidationRule, BigintValidationRule, BooleanValidationRule, DateValidationRule, NumberValidationRule, ObjectValidationRule, StringValidationRule, ValidationRule, ValidationSchema } from './Validator';
 
-export function Controller(options?: ControllerOptions): ClassDecorator {
-	// eslint-disable-next-line @typescript-eslint/ban-types
-	return <TFunction extends Function>(target: TFunction): TFunction | void => {
+export function Controller(options?: ControllerOptions): <Target extends (new (...args: any[]) => any)>(target: Target) => Target | void {
+	return <Target extends (new (...args: any[]) => any)>(target: Target): Target | void => {
 		const ControllerClass = target as unknown as $ControllerType;
 		options = options ?? {};
 
@@ -60,12 +59,39 @@ export function Controller(options?: ControllerOptions): ClassDecorator {
 	};
 }
 
-export function Endpoint(options: EndpointOptions): MethodDecorator {
-	return <T>(
-		target: Record<string, any>,
-		propertyKey: string | symbol,
-		descriptor: TypedPropertyDescriptor<T>,
-	): TypedPropertyDescriptor<T> | void => {
+type SchemaArrayProp<V> = V extends any[] ? SchemaProp<V[number]> : SchemaProp<V>;
+
+type SchemaProp<V> = V extends StringValidationRule ? string :
+	V extends NumberValidationRule ? number :
+		V extends BooleanValidationRule ? boolean :
+			V extends BigintValidationRule ? bigint | string :
+				V extends DateValidationRule ? Date | string :
+					V extends ArrayValidationRule ? SchemaArrayProp<V['nested']>[] :
+						V extends ObjectValidationRule ? (
+							V['schema'] extends object ? Schema<V['schema']> :
+								(
+									V['nested'] extends ValidationRule ? { [key: string]: SchemaArrayProp<V['nested']> } : { [key: string]: any }
+								)
+						) : never;
+
+type Schema<B> = {
+	[P in keyof B]: SchemaProp<B[P]>;
+};
+
+export function Endpoint<
+	Query extends ValidationSchema = ValidationSchema,
+	Body extends ValidationSchema = ValidationSchema,
+	BodyRule extends ValidationRule = ValidationRule,
+>(options: EndpointOptions): <Method extends (requestData: RequestData<Schema<Query>, any, Schema<Body> | { [key: string]: SchemaProp<BodyRule> }>) => any>(
+	target: {},
+	propertyKey: string,
+	descriptor: TypedPropertyDescriptor<Method>,
+) => TypedPropertyDescriptor<Method> | void {
+	return <Method extends (requestData: RequestData<Schema<Query>, any, Schema<Body> | { [key: string]: SchemaProp<BodyRule> }>) => any>(
+		target: { [key: string]: any },
+		propertyKey: string,
+		descriptor: TypedPropertyDescriptor<Method>,
+	): TypedPropertyDescriptor<Method> | void => {
 		(options as $Endpoint).handler = target[propertyKey as keyof typeof target];
 
 		if (options.body) {
@@ -98,12 +124,16 @@ export interface ControllerOptions {
 	responseHandler?: ResponseHandler;
 }
 
-export interface EndpointOptions {
+export interface EndpointOptions<
+	Query extends ValidationSchema = ValidationSchema,
+	Body extends ValidationSchema = ValidationSchema,
+	BodyRule extends ValidationRule = ValidationRule,
+> {
 	path?: string | (string | RegExp)[];
 	method?: HttpMethod | HttpMethod[];
-	query?: ValidationSchema;
-	body?: ValidationSchema;
-	bodyRule?: ValidationRule;
+	query?: Query;
+	body?: Body;
+	bodyRule?: BodyRule;
 	authHandler?: AuthHandler | null;
 	middleware?: MiddlewareType | MiddlewareType[];
 	responseHandler?: ResponseHandler;
@@ -118,11 +148,12 @@ type $ControllerType = (new () => any) & Partial<{
 	__controller: ControllerOptions;
 	__endpoints: $Endpoint[];
 }>;
+
 type $Endpoint = EndpointOptions & Partial<{
 	method: HttpMethod[];
 	controller: $ControllerType;
 	handler: EndpointHandler;
 	location: RegExp;
 	locationTemplate: string;
-	contextResolver?(req: IncomingMessage, res: ServerResponse): Record<string, any>;
+	contextResolver?(req: IncomingMessage, res: ServerResponse): { [key: string]: any };
 }>;

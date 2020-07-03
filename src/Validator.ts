@@ -50,6 +50,10 @@ export class Validator {
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
+		if (!rule) {
+			throw new TypeError('ValidationRule is null or undefined');
+		}
+
 		if (x === undefined) {
 			if (rule.default !== undefined) {
 				if (typeof rule.default === 'function') {
@@ -326,8 +330,4 @@ export interface ObjectValidationRule extends DefaultValidationRule {
 	type: 'object';
 	nested?: ValidationRule;
 	schema?: ValidationSchema;
-}
-
-export function Optional(rule: PrimitiveValidationRule): PrimitiveValidationRule {
-	return { ...rule, optional: true };
 }

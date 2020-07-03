@@ -163,21 +163,29 @@ export async function parseBody(
 
 export function parseCookie(req: IncomingMessage): Cookies {
 	const { cookie } = req.headers;
-	const cookies: Record<string, string> = {};
+	const cookies: Cookies = {};
 
 	if (cookie && cookie !== '') {
 		const cookieItems = cookie.split(';');
 
 		for (const item of cookieItems) {
-			const [name, value] = item.trim().split('=');
-			cookies[decodeURIComponent(name)] = decodeURIComponent(value);
+			const [name, value] = item.trim().split('=')
+				.map(x => decodeURIComponent(x));
+
+			if (cookies[name]) {
+				cookies[name] = [cookies[name], value].flat();
+			} else {
+				cookies[name] = value;
+			}
 		}
 	}
 
 	return cookies;
 }
 
-export type Cookies = Record<string, string>;
+export interface Cookies {
+	[key: string]: string | string[];
+}
 export type BodyTypes = 'urlencoded' | 'json' | 'multipart' | 'text' | 'raw' | 'stream';
 export type BodyOptions = Partial<Record<BodyTypes, { limit: string }>>;
 
