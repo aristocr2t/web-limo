@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-import { IncomingHttpHeaders, IncomingMessage, Server, ServerOptions, ServerResponse, createServer } from 'http';
+import { IncomingMessage, Server, ServerOptions, ServerResponse, createServer } from 'http';
 import * as qs from 'querystring';
 
-import { ControllerOptions, EndpointOptions, HttpMethod, ResponseHandler } from './Controller';
-import { BodyOptions, Cookies, HttpException, parseBody, parseCookie } from './utils';
+import { ControllerOptions, EndpointBuild, HttpMethod, MiddlewareType, ResponseHandler } from './Controller';
+import { BodyOptions, HttpException, parseBody, parseCookie } from './utils';
 import { validate } from './Validator';
 
 export class Application {
@@ -230,27 +230,7 @@ export interface ApplicationOptions extends ServerOptions {
 	};
 }
 
-export type EndpointBuild = EndpointOptions & {
-	module: string;
-	controller: $ControllerType;
-	handler: EndpointHandler;
-	location: RegExp;
-	locationTemplate: string;
-	contextResolver?(req: IncomingMessage, res: ServerResponse): { [key: string]: any };
-};
-
-export type MiddlewareType = (req: IncomingMessage, res: ServerResponse) => boolean | PromiseLike<boolean>;
 export type ControllerType = string | (new () => any);
-export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
-	method: HttpMethod;
-	body: Body;
-	query: Query;
-	params: string[];
-	cookies: Cookies;
-	headers: IncomingHttpHeaders;
-	auth: Auth | null;
-}
-export type EndpointHandler = (request: RequestData, context: { [key: string]: any }) => any | PromiseLike<any>;
 
 export interface Logger {
 	log(...args: any[]): void;

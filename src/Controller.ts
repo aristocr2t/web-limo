@@ -1,7 +1,6 @@
-import type { IncomingMessage, ServerResponse } from 'http';
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http';
 
-import type { EndpointBuild, MiddlewareType, RequestData } from './Application';
-import { BodyType, SetMetadata, parseName } from './utils';
+import { BodyType, Cookies, SetMetadata, parseName } from './utils';
 import type {
 	ArrayValidationRule,
 	BigintValidationRule,
@@ -169,10 +168,33 @@ export interface EndpointOptions<
 	responseHandler?: ResponseHandler;
 }
 
+export type EndpointBuild = EndpointOptions & {
+	module: string;
+	method: HttpMethod;
+	controller: $ControllerType;
+	handler: EndpointHandler;
+	location: RegExp;
+	locationTemplate: string;
+	contextResolver?(req: IncomingMessage, res: ServerResponse): { [key: string]: any };
+};
+
+export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
+	method: HttpMethod;
+	body: Body;
+	query: Query;
+	params: string[];
+	cookies: Cookies;
+	headers: IncomingHttpHeaders;
+	auth: Auth | null;
+}
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
-export type AuthHandler = (req: IncomingMessage, res: ServerResponse) => any | PromiseLike<any>;
 export type ContextResolver = (req: IncomingMessage, res: ServerResponse) => { [key: string]: any } | PromiseLike<{ [key: string]: any }>;
+
+export type EndpointHandler = (request: RequestData, context: { [key: string]: any }) => any | PromiseLike<any>;
+export type AuthHandler = (req: IncomingMessage, res: ServerResponse) => any | PromiseLike<any>;
 export type ResponseHandler = (res: ServerResponse, err: Error | null, body: any) => void | PromiseLike<void>;
+export type MiddlewareType = (req: IncomingMessage, res: ServerResponse) => boolean | PromiseLike<boolean>;
 
 type $ControllerType = (new () => any) & {
 	__controller: ControllerOptions;
