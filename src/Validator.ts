@@ -3,7 +3,7 @@ import { inspect } from 'util';
 
 import { isEqual } from './utils';
 
-export const HIDDEN_SPACES = '\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF';
+export const ESCAPE_REPLACE_ARGS: [string | RegExp, string][] = [[/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]+/g, ''], [/[ \u0009\u00A0\u2000-\u200B\u202F\u205F\u2060\u3000\uFEFD-\uFEFF]+/g, ' ']];
 
 export class ValidationError extends Error {
 	constructor(
@@ -79,7 +79,7 @@ export class Validator {
 		return Validator[rule.type](x, rule as any, propertyPath) as T;
 	};
 
-	private static boolean(x: any, rule: Partial<BooleanValidationRule>, propertyPath: string): boolean | null {
+	private static boolean(x: any, rule: Partial<BooleanValidationRule>, propertyPath: string): boolean {
 		if (x === true || rule.truthy?.includes(x)) {
 			return true;
 		}
@@ -91,7 +91,7 @@ export class Validator {
 		throw new ValidationError(propertyPath, x, rule);
 	}
 
-	private static number(x: any, rule: Partial<NumberValidationRule>, propertyPath: string): number | null {
+	private static number(x: any, rule: Partial<NumberValidationRule>, propertyPath: string): number {
 		if (!isFinite(x)) {
 			throw new ValidationError(propertyPath, x, rule);
 		}
@@ -102,6 +102,7 @@ export class Validator {
 			(rule.integer && !Number.isInteger(num))
 			|| (isFinite(rule.min!) && num < (rule.min!))
 			|| (isFinite(rule.max!) && num > (rule.max!))
+			|| (rule.values && !rule.values.includes(num))
 		) {
 			throw new ValidationError(propertyPath, x, rule);
 		}
@@ -109,7 +110,7 @@ export class Validator {
 		return num;
 	}
 
-	private static bigint(x: unknown, rule: Partial<BigintValidationRule>, propertyPath: string): bigint | null {
+	private static bigint(x: unknown, rule: Partial<BigintValidationRule>, propertyPath: string): bigint {
 		if (!isFinite(x as number)) {
 			throw new ValidationError(propertyPath, x, rule);
 		}
@@ -127,43 +128,43 @@ export class Validator {
 	}
 
 	private static string(x: unknown, rule: Partial<StringValidationRule>, propertyPath: string): string {
-		if (typeof x !== 'string') {
-			if (typeof x === 'number') {
-				return x.toString();
-			}
-
+		if (typeof x === 'number') {
+			x = x.toString();
+		} else if (typeof x !== 'string') {
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
+		let str = x as string;
+
 		if (
-			(Number.isFinite(rule.length as number) && rule.length !== x.length)
-			|| (Number.isFinite(rule.min!) && x.length < (rule.min!))
-			|| (Number.isFinite(rule.max!) && x.length > (rule.max!))
-			|| (typeof rule.pattern === 'string' && !x.includes(rule.pattern))
-			|| (rule.pattern instanceof RegExp && !rule.pattern.test(x))
+			(Number.isFinite(rule.length as number) && rule.length !== str.length)
+			|| (Number.isFinite(rule.min!) && str.length < (rule.min!))
+			|| (Number.isFinite(rule.max!) && str.length > (rule.max!))
+			|| (rule.values && !rule.values.includes(str))
+			|| (typeof rule.pattern === 'string' && !str.includes(rule.pattern))
+			|| (rule.pattern instanceof RegExp && !rule.pattern.test(str))
 		) {
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
-		if (typeof rule.custom === 'function') {
-			return rule.custom(x, rule);
-		}
-
 		if (rule.trim) {
-			x = (x as string).trim();
+			str = str.trim();
 		}
 
-		if (rule.escape) {
-			x = (x as string)
-				.replace(/[\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF]+\n/g, '\n')
-				.replace(/\n[\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF]+/g, '\n')
-				.replace(/[\u2000-\u200B\u202F\u205F\u2060\u3000\u0009\uFEFD-\uFEFF]+/g, ' ');
+		if (rule.escape! > 0) {
+			for (let i = 0, len = ESCAPE_REPLACE_ARGS.length, lvl = rule.escape!; i <= lvl && i < len; i++) {
+				str = str.replace(...ESCAPE_REPLACE_ARGS[i]);
+			}
 		}
 
-		return x as string;
+		if (typeof rule.custom === 'function') {
+			return rule.custom(str, rule);
+		}
+
+		return str as string;
 	}
 
-	private static date(x: unknown, rule: Partial<DateValidationRule>, propertyPath: string): Date | string | null {
+	private static date(x: unknown, rule: Partial<DateValidationRule>, propertyPath: string): Date | string {
 		const date: Date = new Date(x as Date);
 
 		if (isNaN(+date)) {
@@ -185,7 +186,7 @@ export class Validator {
 		return date;
 	}
 
-	private static array(x: any, rule: Partial<ArrayValidationRule>, propertyPath: string): any[] | null {
+	private static array(x: any, rule: Partial<ArrayValidationRule>, propertyPath: string): any[] {
 		if (!Array.isArray(x)) {
 			throw new ValidationError(propertyPath, x, rule);
 		}
@@ -226,7 +227,7 @@ export class Validator {
 		return out;
 	}
 
-	private static object<T extends {}>(x: T, rule: Partial<ObjectValidationRule>, propertyPath: string): T | null {
+	private static object<T extends {}>(x: T, rule: Partial<ObjectValidationRule>, propertyPath: string): T {
 		if (!x || typeof x !== 'object') {
 			throw new ValidationError(propertyPath, x, rule);
 		}
@@ -288,13 +289,12 @@ export interface StringValidationRule extends DefaultValidationRule {
 	length?: number;
 	values?: string[];
 	pattern?: string | RegExp;
-	number?: boolean;
-	integer?: boolean;
 	trim?: boolean;
-	escape?: boolean;
+	escape?: StringEscapeLevels;
 	custom?(x: any, rule: Partial<StringValidationRule>): string;
-	[key: string]: any;
 }
+
+export type StringEscapeLevels = 1 | 2;
 
 export interface NumberValidationRule extends DefaultValidationRule {
 	type: 'number';
@@ -308,7 +308,6 @@ export interface BigintValidationRule extends DefaultValidationRule {
 	type: 'bigint';
 	min?: bigint;
 	max?: bigint;
-	values?: bigint[];
 }
 
 export interface DateValidationRule extends DefaultValidationRule {

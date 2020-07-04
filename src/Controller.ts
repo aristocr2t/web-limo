@@ -59,18 +59,18 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 	};
 }
 
-type SchemaArrayProp<V> = V extends any[] ? SchemaProp<V[number]> : SchemaProp<V>;
+type ArrayElement<V, R = never> = V extends any[] ? V[number] : R;
 
-type SchemaProp<V> = V extends StringValidationRule ? string :
-	V extends NumberValidationRule ? number :
+type SchemaProp<V> = V extends StringValidationRule ? ArrayElement<V['values'], string> :
+	V extends NumberValidationRule ? ArrayElement<V['values'], number> :
 		V extends BooleanValidationRule ? boolean :
 			V extends BigintValidationRule ? bigint | string :
 				V extends DateValidationRule ? Date | string :
-					V extends ArrayValidationRule ? SchemaArrayProp<V['nested']>[] :
+					V extends ArrayValidationRule ? ArrayElement<V['nested'], SchemaProp<V>>[] :
 						V extends ObjectValidationRule ? (
 							V['schema'] extends object ? Schema<V['schema']> :
 								(
-									V['nested'] extends ValidationRule ? { [key: string]: SchemaArrayProp<V['nested']> } : { [key: string]: any }
+									V['nested'] extends ValidationRule ? { [key: string]: ArrayElement<V['nested'], SchemaProp<V>> } : { [key: string]: any }
 								)
 						) : never;
 
