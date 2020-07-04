@@ -3,7 +3,10 @@ import { inspect } from 'util';
 
 import { isEqual } from './utils';
 
-export const ESCAPE_REPLACE_ARGS: [string | RegExp, string][] = [[/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]+/g, ''], [/[ \u0009\u00A0\u2000-\u200B\u202F\u205F\u2060\u3000\uFEFD-\uFEFF]+/g, ' ']];
+export const ESCAPE_REPLACE_ARGS: [string | RegExp, string][] = [
+	[/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]+/g, ''],
+	[/[ \u0009\u00A0\u2000-\u200B\u202F\u205F\u2060\u3000\uFEFD-\uFEFF]+/g, ' '],
+];
 
 export class ValidationError extends Error {
 	constructor(

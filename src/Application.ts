@@ -154,7 +154,7 @@ export class Application {
 				let params!: string[];
 				const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
 
-				if (!endpoint || !endpoint.method.includes(req.method! as HttpMethod)) {
+				if (!endpoint || !endpoint.method.includes(req.method as HttpMethod)) {
 					throw new Error('404');
 				}
 
@@ -179,23 +179,27 @@ export class Application {
 				const query = validate(qs.parse(querystring || ''), {
 					type: 'object',
 					schema: endpoint.query,
-				}, 'query') as Record<string, any>;
+				}, 'query') as { [key: string]: any };
 
-				let body: any = await parseBody(req, this.options.bodyOptions as BodyOptions);
+				let body: any = await parseBody(req, endpoint.bodyType || 'json', this.options.bodyOptions!);
 
-				if (endpoint.body) {
-					body = validate(body, {
-						type: 'object',
-						schema: endpoint.body,
-					}, 'body') as any;
-				} else if (endpoint.bodyRule) {
-					body = validate(body, endpoint.bodyRule, 'body') as any;
+				if (body !== undefined && endpoint.bodyType !== 'stream') {
+					if (endpoint.body) {
+						body = validate(body, {
+							type: 'object',
+							schema: endpoint.body,
+						}, 'body') as any;
+					} else if (endpoint.bodyRule) {
+						body = validate(body, endpoint.bodyRule, 'body') as any;
+					}
 				}
 
-				const { headers } = req;
+				const headers = req.headers;
+				const method = req.method as HttpMethod;
 				const cookies = parseCookie(req);
 
 				let responseBody = endpoint.handler.call(controller, {
+					method,
 					auth,
 					body,
 					query,
@@ -233,12 +237,13 @@ export type EndpointBuild = EndpointOptions & {
 	handler: EndpointHandler;
 	location: RegExp;
 	locationTemplate: string;
-	contextResolver?(req: IncomingMessage, res: ServerResponse): Record<string, any>;
+	contextResolver?(req: IncomingMessage, res: ServerResponse): { [key: string]: any };
 };
 
 export type MiddlewareType = (req: IncomingMessage, res: ServerResponse) => boolean | PromiseLike<boolean>;
 export type ControllerType = string | (new () => any);
 export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
+	method: HttpMethod;
 	body: Body;
 	query: Query;
 	params: string[];
@@ -246,7 +251,7 @@ export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
 	headers: IncomingHttpHeaders;
 	auth: Auth | null;
 }
-export type EndpointHandler = (request: RequestData, context: Record<string, any>) => any | PromiseLike<any>;
+export type EndpointHandler = (request: RequestData, context: { [key: string]: any }) => any | PromiseLike<any>;
 
 export interface Logger {
 	log(...args: any[]): void;

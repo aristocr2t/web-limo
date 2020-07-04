@@ -1,8 +1,18 @@
-import { IncomingMessage, ServerResponse } from 'http';
+import type { IncomingMessage, ServerResponse } from 'http';
 
-import { EndpointBuild, MiddlewareType, RequestData } from './Application';
-import { SetMetadata, parseName } from './utils';
-import { ArrayValidationRule, BigintValidationRule, BooleanValidationRule, DateValidationRule, NumberValidationRule, ObjectValidationRule, StringValidationRule, ValidationRule, ValidationSchema } from './Validator';
+import type { EndpointBuild, MiddlewareType, RequestData } from './Application';
+import { BodyType, SetMetadata, parseName } from './utils';
+import type {
+	ArrayValidationRule,
+	BigintValidationRule,
+	BooleanValidationRule,
+	DateValidationRule,
+	NumberValidationRule,
+	ObjectValidationRule,
+	StringValidationRule,
+	ValidationRule,
+	ValidationSchema,
+} from './Validator';
 
 export function Controller(options?: ControllerOptions): <Target extends (new (...args: any[]) => any)>(target: Target) => Target | void {
 	return <Target extends (new (...args: any[]) => any)>(target: Target): Target | void => {
@@ -25,6 +35,10 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 			endpoint.controller = ControllerClass;
 			endpoint.method = [endpoint.method || options.method].flat().filter(Boolean);
 			endpoint.contextResolver = options.contextResolver;
+
+			if (!endpoint.bodyType && (endpoint.method.includes('POST') || endpoint.method.includes('PUT') || endpoint.method.includes('PATCH') || endpoint.method.includes('DELETE'))) {
+				endpoint.bodyType = 'json';
+			}
 
 			if (endpoint.authHandler === undefined) {
 				endpoint.authHandler = options.authHandler ?? null;
@@ -82,13 +96,18 @@ export function Endpoint<
 	Options extends EndpointOptions,
 	Query = Options['query'],
 	Body = Options['body'],
-	BodyRule = Options['bodyRule']
+	BodyRule = Options['bodyRule'],
+	BodyType = Options['bodyType'],
 >(options: Options): <
 	Method extends (
 		requestData: RequestData<
 		any,
 		Query extends ValidationSchema ? Schema<Query> : any,
-		Body extends ValidationSchema ? Schema<Body> : (BodyRule extends ValidationRule ? SchemaProp<BodyRule> : any)
+		BodyType extends 'stream' ? IncomingMessage :
+			BodyType extends 'text' ? string :
+				BodyType extends 'raw' ? Buffer :
+					Body extends ValidationSchema ? Schema<Body> :
+						BodyRule extends ValidationRule ? SchemaProp<BodyRule> : any
 		>,
 		context: any,
 	) => any | PromiseLike<any>,
@@ -140,6 +159,7 @@ export interface EndpointOptions<
 	query?: Query;
 	body?: Body;
 	bodyRule?: BodyRule;
+	bodyType?: BodyType;
 	authHandler?: AuthHandler | null;
 	middleware?: MiddlewareType | MiddlewareType[];
 	responseHandler?: ResponseHandler;

@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import * as contentType from 'content-type';
 import { IncomingForm } from 'formidable';
-import { IncomingMessage } from 'http';
+import type { IncomingMessage } from 'http';
 import * as qs from 'querystring';
 import * as rawBody from 'raw-body';
+import type { Readable } from 'stream';
 
 export function snakeCase(value: string): string {
 	return value ? value.replace(/(?:[^\w\d]+)?([A-Z]+)/g, (fm, m: string) => `_${m.toLowerCase()}`).replace(/^_/, '') : '';
@@ -99,65 +100,123 @@ export function parseMultipart(req: IncomingMessage): Promise<MultipartData> {
 	});
 }
 
+const BodyTypes: { [key: string]: BodyType } = {
+	'application/json': 'json',
+	'application/x-www-form-urlencoded': 'urlencoded',
+	'multipart/form-data': 'multipart',
+};
+
 export async function parseBody(
 	req: IncomingMessage,
+	bodyType: 'json',
 	options: BodyOptions,
-): Promise<string | Buffer | JsonData | UrlencodedData | MultipartData | IncomingMessage> {
-	if ((req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH') || !req.headers['content-type']) {
-		return null;
+): Promise<JsonData>;
+export async function parseBody(
+	req: IncomingMessage,
+	bodyType: 'urlencoded',
+	options: BodyOptions,
+): Promise<UrlencodedData>;
+export async function parseBody(
+	req: IncomingMessage,
+	bodyType: 'multipart',
+	options: BodyOptions,
+): Promise<MultipartData>;
+export async function parseBody(
+	req: IncomingMessage,
+	bodyType: 'stream',
+	options: BodyOptions,
+): Promise<Readable>;
+export async function parseBody(
+	req: IncomingMessage,
+	bodyType: 'text',
+	options: BodyOptions,
+): Promise<string>;
+export async function parseBody(
+	req: IncomingMessage,
+	bodyType: 'raw',
+	options: BodyOptions,
+): Promise<Buffer>;
+export async function parseBody(
+	req: IncomingMessage,
+	bodyType: BodyType,
+	options: BodyOptions,
+): Promise<string | Buffer | JsonData | UrlencodedData | MultipartData | Readable>;
+export async function parseBody(
+	req: IncomingMessage,
+	bodyType: BodyType,
+	options: BodyOptions,
+): Promise<undefined | string | Buffer | JsonData | UrlencodedData | MultipartData | Readable> {
+	if (req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH' && req.method !== 'DELETE') {
+		return undefined;
 	}
 
-	try {
-		const { type, parameters } = contentType.parse(req);
+	if (!req.headers['content-type']) {
+		throw new Error('400');
+	}
 
-		const parseOptions = {
-			length: req.headers['content-length'],
-			encoding: parameters.charset,
-		};
+	const { type, parameters } = contentType.parse(req);
 
-		switch (type) {
-			case 'multipart/form-data':
-				const data = await parseMultipart(req);
+	const parseOptions: rawBody.Options = {
+		length: req.headers['content-length'],
+		encoding: parameters.charset || 'utf8',
+		limit: options[bodyType]?.limit,
+	};
 
-				return data;
-			case 'application/x-www-form-urlencoded': {
-				const raw = await rawBody(req, {
-					...parseOptions,
-					limit: options.urlencoded?.limit,
-				});
-
-				return qs.parse(raw) as UrlencodedData;
+	switch (bodyType) {
+		case 'json':
+		{
+			if (BodyTypes[type] !== bodyType) {
+				throw new Error('400');
 			}
 
-			case 'application/json': {
-				const raw = await rawBody(req, {
-					...parseOptions,
-					limit: options.json?.limit,
-				});
+			const raw = await rawBody(req, parseOptions as { encoding: string });
 
-				return JSON.parse(raw) as JsonData;
-			}
-
-			default: {
-				if (type.startsWith('text/')) {
-					const raw = await rawBody(req, {
-						...parseOptions,
-						limit: options.text?.limit,
-					});
-
-					return raw;
-				}
-
-				const raw = await rawBody(req, {
-					...parseOptions,
-					limit: options.raw?.limit,
-				});
-
-				return raw;
-			}
+			return JSON.parse(raw) as JsonData;
 		}
-	} catch (err) {
-		throw err;
+
+		case 'urlencoded':
+		{
+			if (BodyTypes[type] !== bodyType) {
+				throw new Error('400');
+			}
+
+			const raw = await rawBody(req, parseOptions as { encoding: string });
+
+			return qs.parse(raw) as UrlencodedData;
+		}
+
+		case 'multipart':
+		{
+			if (BodyTypes[type] !== bodyType) {
+				throw new Error('400');
+			}
+
+			const data = await parseMultipart(req);
+
+			return data;
+		}
+
+		case 'stream':
+			return req;
+
+		case 'text': {
+			if (!type.startsWith('text/')) {
+				throw new Error('400');
+			}
+
+			const raw = await rawBody(req, parseOptions as { encoding: string });
+
+			return raw;
+		}
+
+		case 'raw':
+		default: {
+			parseOptions.encoding = undefined;
+
+			const raw = await rawBody(req, parseOptions as { encoding: undefined });
+
+			return raw;
+		}
 	}
 }
 
@@ -186,9 +245,14 @@ export function parseCookie(req: IncomingMessage): Cookies {
 export interface Cookies {
 	[key: string]: string | string[];
 }
-export type BodyTypes = 'urlencoded' | 'json' | 'multipart' | 'text' | 'raw' | 'stream';
-export type BodyOptions = Partial<Record<BodyTypes, { limit: string }>>;
+
+export type BodyType = 'urlencoded' | 'json' | 'multipart' | 'text' | 'raw' | 'stream';
+export type BodyOptions = Partial<Record<BodyType, { limit: string }>>;
 
 export type JsonData = string | number | boolean | null | { [key: string]: JsonData } | JsonData[];
-export type UrlencodedData = Record<string, string | string[]>;
-export type MultipartData = Record<string, string | string[] | File>;
+export interface UrlencodedData {
+	[key: string]: string | string[];
+}
+export interface MultipartData {
+	[key: string]: string | string[] | File;
+}
