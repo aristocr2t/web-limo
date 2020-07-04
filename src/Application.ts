@@ -3,7 +3,7 @@ import { IncomingHttpHeaders, IncomingMessage, Server, ServerOptions, ServerResp
 import * as qs from 'querystring';
 
 import { ControllerOptions, EndpointOptions, HttpMethod, ResponseHandler } from './Controller';
-import { BodyOptions, Cookies, parseBody, parseCookie } from './utils';
+import { BodyOptions, Cookies, HttpException, parseBody, parseCookie } from './utils';
 import { validate } from './Validator';
 
 export class Application {
@@ -97,7 +97,7 @@ export class Application {
 		);
 
 		const locationTemplates = this.endpoints
-			.map(ep => ep.method.map(m => `${m} ${ep.locationTemplate}`)).flat();
+			.map(ep => `${ep.method} ${ep.locationTemplate}`);
 
 		for (let i = 0, len = locationTemplates.length, lt: string; i < len; i++) {
 			lt = locationTemplates[i];
@@ -154,8 +154,8 @@ export class Application {
 				let params!: string[];
 				const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
 
-				if (!endpoint || !endpoint.method.includes(req.method as HttpMethod)) {
-					throw new Error('404');
+				if (!endpoint || endpoint.method !== req.method) {
+					throw new HttpException(404, 'Not found');
 				}
 
 				params = Array.from(params).slice(1);
@@ -231,7 +231,6 @@ export interface ApplicationOptions extends ServerOptions {
 }
 
 export type EndpointBuild = EndpointOptions & {
-	method: HttpMethod[];
 	module: string;
 	controller: $ControllerType;
 	handler: EndpointHandler;

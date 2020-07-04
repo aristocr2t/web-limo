@@ -6,6 +6,12 @@ import * as qs from 'querystring';
 import * as rawBody from 'raw-body';
 import type { Readable } from 'stream';
 
+export class HttpException extends Error {
+	constructor(readonly statusCode: number = 500, message?: string, readonly details?: any) {
+		super(message);
+	}
+}
+
 export function snakeCase(value: string): string {
 	return value ? value.replace(/(?:[^\w\d]+)?([A-Z]+)/g, (fm, m: string) => `_${m.toLowerCase()}`).replace(/^_/, '') : '';
 }
@@ -151,7 +157,7 @@ export async function parseBody(
 	}
 
 	if (!req.headers['content-type']) {
-		throw new Error('400');
+		throw new HttpException(400, 'Incorrect header "Content-Type"');
 	}
 
 	const { type, parameters } = contentType.parse(req);
@@ -162,61 +168,69 @@ export async function parseBody(
 		limit: options[bodyType]?.limit,
 	};
 
-	switch (bodyType) {
-		case 'json':
-		{
-			if (BodyTypes[type] !== bodyType) {
-				throw new Error('400');
+	try {
+		switch (bodyType) {
+			case 'json':
+			{
+				if (BodyTypes[type] !== bodyType) {
+					throw new HttpException(400, 'Incorrect header "Content-Type"');
+				}
+
+				const raw = await rawBody(req, parseOptions as { encoding: string });
+
+				return JSON.parse(raw) as JsonData;
 			}
 
-			const raw = await rawBody(req, parseOptions as { encoding: string });
+			case 'urlencoded':
+			{
+				if (BodyTypes[type] !== bodyType) {
+					throw new HttpException(400, 'Incorrect header "Content-Type"');
+				}
 
-			return JSON.parse(raw) as JsonData;
-		}
+				const raw = await rawBody(req, parseOptions as { encoding: string });
 
-		case 'urlencoded':
-		{
-			if (BodyTypes[type] !== bodyType) {
-				throw new Error('400');
+				return qs.parse(raw) as UrlencodedData;
 			}
 
-			const raw = await rawBody(req, parseOptions as { encoding: string });
+			case 'multipart':
+			{
+				if (BodyTypes[type] !== bodyType) {
+					throw new HttpException(400, 'Incorrect header "Content-Type"');
+				}
 
-			return qs.parse(raw) as UrlencodedData;
-		}
+				const data = await parseMultipart(req);
 
-		case 'multipart':
-		{
-			if (BodyTypes[type] !== bodyType) {
-				throw new Error('400');
+				return data;
 			}
 
-			const data = await parseMultipart(req);
+			case 'stream':
+				return req;
 
-			return data;
-		}
+			case 'text': {
+				if (!type.startsWith('text/')) {
+					throw new HttpException(400, 'Incorrect header "Content-Type"');
+				}
 
-		case 'stream':
-			return req;
+				const raw = await rawBody(req, parseOptions as { encoding: string });
 
-		case 'text': {
-			if (!type.startsWith('text/')) {
-				throw new Error('400');
+				return raw;
 			}
 
-			const raw = await rawBody(req, parseOptions as { encoding: string });
+			case 'raw':
+			default: {
+				parseOptions.encoding = undefined;
 
-			return raw;
+				const raw = await rawBody(req, parseOptions as { encoding: undefined });
+
+				return raw;
+			}
+		}
+	} catch (err) {
+		if (!(err instanceof HttpException)) {
+			throw new HttpException(400, 'Bad Request', err);
 		}
 
-		case 'raw':
-		default: {
-			parseOptions.encoding = undefined;
-
-			const raw = await rawBody(req, parseOptions as { encoding: undefined });
-
-			return raw;
-		}
+		throw err;
 	}
 }
 

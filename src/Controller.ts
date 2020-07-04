@@ -19,7 +19,7 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 		const ControllerClass = target as unknown as $ControllerType;
 		options = options ?? {};
 
-		options.method = [options.method || 'GET'].flat().filter(Boolean) as HttpMethod[];
+		if (!options.method) options.method = 'GET';
 		options.useMethodNames = options.useMethodNames ?? false;
 		options.path = options.path ?? parseName(target.name, 'Controller');
 		options.authHandler = options.authHandler ?? undefined;
@@ -33,7 +33,11 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 		for (const key of keys) {
 			const endpoint = endpoints[key];
 			endpoint.controller = ControllerClass;
-			endpoint.method = [endpoint.method || options.method].flat().filter(Boolean);
+
+			if (!endpoint.method) {
+				endpoint.method = options.method || 'GET';
+			}
+
 			endpoint.contextResolver = options.contextResolver;
 
 			if (!endpoint.bodyType && (endpoint.method.includes('POST') || endpoint.method.includes('PUT') || endpoint.method.includes('PATCH') || endpoint.method.includes('DELETE'))) {
@@ -141,7 +145,7 @@ export function Endpoint<
 
 export interface ControllerOptions {
 	path?: string | (string | RegExp)[];
-	method?: HttpMethod | HttpMethod[];
+	method?: HttpMethod;
 	useMethodNames?: boolean;
 	contextResolver?: ContextResolver;
 	authHandler?: AuthHandler;
@@ -155,7 +159,7 @@ export interface EndpointOptions<
 	BodyRule extends ValidationRule = ValidationRule,
 > {
 	path?: string | (string | RegExp)[];
-	method?: HttpMethod | HttpMethod[];
+	method?: HttpMethod;
 	query?: Query;
 	body?: Body;
 	bodyRule?: BodyRule;
