@@ -153,4 +153,5 @@ export type ResponseHandler = (res: ServerResponse, err: Error | null, body: any
 type $ControllerType = (new () => any) & {
 	__controller: ControllerOptions;
 	__endpoints: Record<string, EndpointBuild>;
+	__module: string;
 };

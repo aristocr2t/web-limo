@@ -15,11 +15,22 @@ export class Application {
 				const imports = await import(controller);
 				options.controllers[i] = Object
 					.values(imports)
-					.filter(c => typeof c === 'function' && (c as $ControllerType).__controller) as any;
+					.filter(c => typeof c === 'function' && (c as $ControllerType).__controller)
+					.map((c) => {
+						(c as $ControllerType).__module = controller as string;
+
+						return c;
+					}) as any;
 			}
 		}
 
-		options.controllers = options.controllers.flat();
+		options.controllers = options.controllers.flat().map(c => {
+			if (!(c as $ControllerType).__module) {
+				(c as $ControllerType).__module = '';
+			}
+
+			return c;
+		});
 
 		const application = new Application(options);
 
@@ -77,7 +88,11 @@ export class Application {
 		this.endpoints.push(
 			...(this.options.controllers as $ControllerType[])
 				.filter(c => c.__endpoints)
-				.map(c => Object.values(c.__endpoints))
+				.map(c => Object.values(c.__endpoints).map(e => {
+					e.module = c.__module;
+
+					return e;
+				}))
 				.flat()
 		);
 
@@ -211,13 +226,9 @@ export interface ApplicationOptions extends ServerOptions {
 	};
 }
 
-type $ControllerType = (new () => any) & {
-	__controller: ControllerOptions;
-	__endpoints: Record<string, EndpointBuild>;
-};
-
 export type EndpointBuild = EndpointOptions & {
 	method: HttpMethod[];
+	module: string;
 	controller: $ControllerType;
 	handler: EndpointHandler;
 	location: RegExp;
@@ -245,3 +256,9 @@ export interface Logger {
 	error(...args: any[]): void;
 	dir(...args: any[]): void;
 }
+
+type $ControllerType = (new () => any) & {
+	__controller: ControllerOptions;
+	__endpoints: Record<string, EndpointBuild>;
+	__module: string;
+};
