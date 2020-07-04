@@ -1,6 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'http';
 
-import { EndpointHandler, MiddlewareType, RequestData } from './Application';
+import { EndpointBuild, MiddlewareType, RequestData } from './Application';
 import { SetMetadata, parseName } from './utils';
 import { ArrayValidationRule, BigintValidationRule, BooleanValidationRule, DateValidationRule, NumberValidationRule, ObjectValidationRule, StringValidationRule, ValidationRule, ValidationSchema } from './Validator';
 
@@ -17,7 +17,7 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 		options.responseHandler = options.responseHandler ?? undefined;
 		options.contextResolver = options.contextResolver ?? undefined;
 
-		const endpoints = (ControllerClass.__endpoints || {}) as Record<string, $Endpoint>;
+		const endpoints = (ControllerClass.__endpoints || {}) as Record<string, EndpointBuild>;
 		const keys = Object.keys(endpoints) as (keyof typeof endpoints & string)[];
 
 		for (const key of keys) {
@@ -98,7 +98,7 @@ export function Endpoint<
 	descriptor: TypedPropertyDescriptor<Method>,
 ) => TypedPropertyDescriptor<Method> | void {
 	return (target, propertyKey, descriptor) => {
-		(options as $Endpoint).handler = target[propertyKey as keyof typeof target];
+		(options as unknown as EndpointBuild).handler = target[propertyKey as keyof typeof target];
 
 		if (options.body) {
 			const keys = Object.keys(options.body);
@@ -150,16 +150,7 @@ export type AuthHandler = (req: IncomingMessage, res: ServerResponse) => any | P
 export type ContextResolver = (req: IncomingMessage, res: ServerResponse) => { [key: string]: any } | PromiseLike<{ [key: string]: any }>;
 export type ResponseHandler = (res: ServerResponse, err: Error | null, body: any) => void | PromiseLike<void>;
 
-type $ControllerType = (new () => any) & Partial<{
+type $ControllerType = (new () => any) & {
 	__controller: ControllerOptions;
-	__endpoints: $Endpoint[];
-}>;
-
-type $Endpoint = EndpointOptions & Partial<{
-	method: HttpMethod[];
-	controller: $ControllerType;
-	handler: EndpointHandler;
-	location: RegExp;
-	locationTemplate: string;
-	contextResolver?(req: IncomingMessage, res: ServerResponse): { [key: string]: any };
-}>;
+	__endpoints: Record<string, EndpointBuild>;
+};

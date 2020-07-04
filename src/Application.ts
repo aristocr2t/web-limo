@@ -29,19 +29,19 @@ export class Application {
 	address: string | undefined;
 	private readonly server: Server;
 	private readonly options: ApplicationOptions;
-	private readonly endpoints: $Endpoint[] = [];
+	private readonly endpoints: EndpointBuild[] = [];
 
 	private constructor(options: ApplicationOptions) {
-		if (!options.logger) {
-			options.logger = console;
-		}
-
 		if (!options.middlewares) {
 			options.middlewares = [];
 		}
 
 		if (!options.bodyOptions) {
 			options.bodyOptions = {};
+		}
+
+		if (!options.hooks) {
+			options.hooks = {};
 		}
 
 		if (options.defaultActionCode === undefined) {
@@ -52,29 +52,11 @@ export class Application {
 			this.responseHandler = options.responseHandler;
 		}
 
-		this.endpoints.push(
-			...(options.controllers as $ControllerType[])
-				.filter(c => c.__endpoints)
-				.map(c => Object.values(c.__endpoints))
-				.flat()
-		);
-
-		const locationTemplates = this.endpoints
-			.map(ep => ep.method.map(m => `${ep.locationTemplate} (${m})`)).flat();
-
-		for (let i = 0, len = locationTemplates.length, lt: string; i < len; i++) {
-			lt = locationTemplates[i];
-
-			if (locationTemplates.indexOf(lt) !== i) {
-				throw new Error(`Some endpoints have the same location: ${lt}`);
-			}
-		}
-
-		for (const lt of locationTemplates) {
-			options.logger.info(`add location ${lt}`);
-		}
-
 		this.options = options;
+
+		// LOAD ENDPOINTS
+		this.loadEndpoints();
+
 		this.server = createServer(this.requestHandler);
 	}
 
@@ -89,6 +71,36 @@ export class Application {
 				reject(err);
 			});
 		});
+	}
+
+	private loadEndpoints(): void {
+		this.endpoints.push(
+			...(this.options.controllers as $ControllerType[])
+				.filter(c => c.__endpoints)
+				.map(c => Object.values(c.__endpoints))
+				.flat()
+		);
+
+		const locationTemplates = this.endpoints
+			.map(ep => ep.method.map(m => `${m} ${ep.locationTemplate}`)).flat();
+
+		for (let i = 0, len = locationTemplates.length, lt: string; i < len; i++) {
+			lt = locationTemplates[i];
+
+			if (locationTemplates.indexOf(lt) !== i) {
+				throw new Error(`Some endpoints have the same location: ${lt}`);
+			}
+		}
+
+		if (this.options.logger) {
+			for (const lt of locationTemplates) {
+				this.options.logger.info(`add location ${lt}`);
+			}
+		}
+
+		if (this.options.hooks!.endpointsLoad) {
+			this.options.hooks!.endpointsLoad(this.endpoints);
+		}
 	}
 
 	private async resolveMiddlewares(req: IncomingMessage, res: ServerResponse, middlewares: MiddlewareType[]): Promise<boolean> {
@@ -194,13 +206,17 @@ export interface ApplicationOptions extends ServerOptions {
 	responseHandler?: ResponseHandler;
 	defaultActionCode?: number | string;
 	bodyOptions?: BodyOptions;
+	hooks?: {
+		endpointsLoad?(endpoints: EndpointBuild[]): any | PromiseLike<any>;
+	};
 }
 
 type $ControllerType = (new () => any) & {
 	__controller: ControllerOptions;
-	__endpoints: Record<string, $Endpoint>;
+	__endpoints: Record<string, EndpointBuild>;
 };
-type $Endpoint = EndpointOptions & {
+
+export type EndpointBuild = EndpointOptions & {
 	method: HttpMethod[];
 	controller: $ControllerType;
 	handler: EndpointHandler;
