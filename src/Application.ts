@@ -155,7 +155,7 @@ export class Application {
 				const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
 
 				if (!endpoint || endpoint.method !== req.method) {
-					throw new HttpException(404, 'Not found');
+					throw new HttpException(404, undefined, new Error('Not found'));
 				}
 
 				params = Array.from(params).slice(1);
@@ -176,21 +176,31 @@ export class Application {
 
 				const auth = endpoint.authHandler ? await endpoint.authHandler(req, res) : null;
 
-				const query = validate(qs.parse(querystring || ''), {
-					type: 'object',
-					schema: endpoint.query,
-				}, 'query') as { [key: string]: any };
+				let query: { [key: string]: any };
+
+				try {
+					query = validate(qs.parse(querystring || ''), {
+						type: 'object',
+						schema: endpoint.query,
+					}, 'query') as { [key: string]: any };
+				} catch (err) {
+					throw new HttpException(400, undefined, err);
+				}
 
 				let body: any = await parseBody(req, endpoint.bodyType || 'json', this.options.bodyOptions!);
 
 				if (body !== undefined && endpoint.bodyType !== 'stream') {
-					if (endpoint.body) {
-						body = validate(body, {
-							type: 'object',
-							schema: endpoint.body,
-						}, 'body') as any;
-					} else if (endpoint.bodyRule) {
-						body = validate(body, endpoint.bodyRule, 'body') as any;
+					try {
+						if (endpoint.body) {
+							body = validate(body, {
+								type: 'object',
+								schema: endpoint.body,
+							}, 'body') as any;
+						} else if (endpoint.bodyRule) {
+							body = validate(body, endpoint.bodyRule, 'body') as any;
+						}
+					} catch (err) {
+						throw new HttpException(400, undefined, err);
 					}
 				}
 

@@ -9,6 +9,7 @@ import type { Readable } from 'stream';
 export class HttpException extends Error {
 	constructor(readonly statusCode: number = 500, message?: string, readonly details?: any) {
 		super(message);
+		Object.setPrototypeOf(this, HttpException.prototype);
 	}
 }
 
@@ -157,7 +158,7 @@ export async function parseBody(
 	}
 
 	if (!req.headers['content-type']) {
-		throw new HttpException(400, 'Incorrect header "Content-Type"');
+		throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 	}
 
 	const { type, parameters } = contentType.parse(req);
@@ -173,7 +174,7 @@ export async function parseBody(
 			case 'json':
 			{
 				if (BodyTypes[type] !== bodyType) {
-					throw new HttpException(400, 'Incorrect header "Content-Type"');
+					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
 				const raw = await rawBody(req, parseOptions as { encoding: string });
@@ -184,7 +185,7 @@ export async function parseBody(
 			case 'urlencoded':
 			{
 				if (BodyTypes[type] !== bodyType) {
-					throw new HttpException(400, 'Incorrect header "Content-Type"');
+					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
 				const raw = await rawBody(req, parseOptions as { encoding: string });
@@ -195,7 +196,7 @@ export async function parseBody(
 			case 'multipart':
 			{
 				if (BodyTypes[type] !== bodyType) {
-					throw new HttpException(400, 'Incorrect header "Content-Type"');
+					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
 				const data = await parseMultipart(req);
@@ -208,7 +209,7 @@ export async function parseBody(
 
 			case 'text': {
 				if (!type.startsWith('text/')) {
-					throw new HttpException(400, 'Incorrect header "Content-Type"');
+					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
 				const raw = await rawBody(req, parseOptions as { encoding: string });

@@ -10,11 +10,11 @@ export const ESCAPE_REPLACE_ARGS: [string | RegExp, string][] = [
 
 export class ValidationError extends Error {
 	constructor(
-		readonly propertyPath: string | undefined,
+		readonly propertyPath: string,
 		readonly value: any,
-		readonly rule: DefaultValidationRule | DefaultValidationRule[]
+		readonly rule: DefaultValidationRule | DefaultValidationRule[],
 	) {
-		super(`${propertyPath} (${inspect(value)}) does not apply rule: ${inspect(rule)}`);
+		super(`${propertyPath} ${inspect(value)} does not apply rule ${inspect(rule)}`);
 		Object.setPrototypeOf(this, ValidationError.prototype);
 	}
 }
@@ -22,42 +22,24 @@ export class ValidationError extends Error {
 export class Validator {
 	static validate = <T>(x: T, rule: ValidationRule, propertyPath: string = 'this'): T | undefined => {
 		if (Array.isArray(rule)) {
-			for (const r of rule as PrimitiveValidationRule[]) {
+			for (const r of rule) {
 				try {
-					if (x === undefined) {
-						if (r.default !== undefined) {
-							if (typeof r.default === 'function') {
-								return r.default(x, r) as T | undefined;
-							}
-
-							return r.default as T | undefined;
-						}
-
-						if (r.optional) {
-							return undefined;
-						}
-
-						return Validator[r.type](x, r as any, propertyPath) as T;
-					}
-
-					const defaultValue = typeof r.default === 'function' ? r.default(x, r) : r.default;
-
-					if (isEqual(x, defaultValue)) {
-						return x;
-					}
-
-					return Validator[r.type](x, r as any, propertyPath) as T;
+					return Validator.resolve(x, r, propertyPath);
 				} catch {}
 			}
 
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
+		return Validator.resolve(x, rule, propertyPath);
+	};
+
+	private static resolve<T>(x: T, rule: PrimitiveValidationRule, propertyPath: string): T | undefined {
 		if (!rule) {
 			throw new TypeError('ValidationRule is null or undefined');
 		}
 
-		if (x === undefined) {
+		if (x === undefined || x === null) {
 			if (rule.default !== undefined) {
 				if (typeof rule.default === 'function') {
 					return rule.default(x, rule) as T | undefined;
@@ -80,7 +62,7 @@ export class Validator {
 		}
 
 		return Validator[rule.type](x, rule as any, propertyPath) as T;
-	};
+	}
 
 	private static boolean(x: any, rule: Partial<BooleanValidationRule>, propertyPath: string): boolean {
 		if (x === true || rule.truthy?.includes(x)) {
@@ -194,36 +176,24 @@ export class Validator {
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
+		if (
+			(Number.isFinite(rule.length!) && rule.length !== x.length)
+			|| (Number.isFinite(rule.min!) && x.length < (rule.min!))
+			|| (Number.isFinite(rule.max!) && x.length > (rule.max!))
+		) {
+			throw new ValidationError(propertyPath, x, rule);
+		}
+
 		let out = [];
 
 		if (rule.nested) {
-			if (Array.isArray(rule.nested)) {
-				const { length } = rule.nested;
+			const nestedRule = rule.nested;
 
-				if (x.length !== length) {
-					throw new ValidationError(propertyPath, x, rule);
-				}
-
-				for (let i = 0; i < length; i++) {
-					out.push(this.validate(x[i], rule.nested[i], `${propertyPath}[${i}]`));
-				}
-			} else {
-				const nestedRule = rule.nested;
-
-				for (let i = 0; i < x.length; i++) {
-					out.push(this.validate(x[i], nestedRule, `${propertyPath}[${i}]`));
-				}
+			for (let i = 0, len = x.length; i < len; i++) {
+				out.push(this.validate(x[i], nestedRule, `${propertyPath}[${i}]`));
 			}
 		} else {
 			out = Array.from(x);
-		}
-
-		if (
-			(Number.isFinite(rule.length as number) && rule.length !== out.length)
-			|| (Number.isFinite(rule.min!) && out.length < (rule.min!))
-			|| (Number.isFinite(rule.max!) && out.length > (rule.max!))
-		) {
-			throw new ValidationError(propertyPath, x, rule);
 		}
 
 		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
@@ -245,9 +215,10 @@ export class Validator {
 			}
 		} else if (rule.nested) {
 			const keys = Object.keys(x);
+			const nestedRule = rule.nested;
 
 			for (const key of keys) {
-				out[key as keyof T] = this.validate(x[key as keyof T], rule.nested, `${propertyPath}.${key}`) as T[keyof T];
+				out[key as keyof T] = this.validate(x[key as keyof T], nestedRule, `${propertyPath}.${key}`) as T[keyof T];
 			}
 		}
 
@@ -322,7 +293,7 @@ export interface DateValidationRule extends DefaultValidationRule {
 
 export interface ArrayValidationRule extends DefaultValidationRule {
 	type: 'array';
-	nested?: ValidationRule | ValidationRule[];
+	nested?: ValidationRule;
 	length?: number;
 	min?: number;
 	max?: number;
