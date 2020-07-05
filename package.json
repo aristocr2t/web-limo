@@ -1,6 +1,6 @@
 {
 	"name": "web-limo",
-	"version": "3.6.0",
+	"version": "3.7.0",
 	"description": "node.js mvc server framework",
 	"main": "index.js",
 	"typings": "index.d.ts",
@@ -9,9 +9,6 @@
 		"build": "tsc --diagnostics && cp -r dist node_modules/web-limo",
 		"prepublishOnly": "npm run build && node prepublish.js",
 		"release": "RELEASE_MODE=true npm run prepublishOnly && npm publish dist/",
-		"test": "jest --runInBand --detectOpenHandles",
-		"test:cov": "jest --coverage",
-		"test:debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
 		"fix": "eslint \"src/**/*.ts\" --fix --ext .ts",
 		"lint": "eslint \"src/**/*.ts\" -f codeframe"
 	},
@@ -31,9 +28,7 @@
 		"eslint": "^7.4.0",
 		"eslint-plugin-import": "^2.22.0",
 		"fs": "0.0.1-security",
-		"jest": "^26.1.0",
 		"rimraf": "^3.0.2",
-		"ts-jest": "^26.1.1",
 		"typescript": "^3.9.6"
 	},
 	"engines": {

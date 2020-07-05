@@ -3,7 +3,7 @@ import { IncomingMessage, Server, ServerOptions, ServerResponse, createServer } 
 import * as qs from 'querystring';
 
 import { ControllerOptions, EndpointBuild, HttpMethod, MiddlewareType, ResponseHandler } from './Controller';
-import { BodyOptions, HttpException, parseBody, parseCookie } from './utils';
+import { BodyOptions, HttpException, Parsers, parseBody, parseCookie } from './utils';
 import { validate } from './Validator';
 
 export class Application {
@@ -53,6 +53,18 @@ export class Application {
 
 		if (!options.hooks) {
 			options.hooks = {};
+		}
+
+		if (!options.parsers) {
+			options.parsers = {};
+		}
+
+		if (!options.parsers.json) {
+			options.parsers.json = JSON;
+		}
+
+		if (!options.parsers.qs) {
+			options.parsers.qs = qs;
 		}
 
 		if (options.defaultActionCode === undefined) {
@@ -158,6 +170,8 @@ export class Application {
 					throw new HttpException(404, undefined, new Error('Not found'));
 				}
 
+				const parsers = this.options.parsers as Parsers;
+
 				params = Array.from(params).slice(1);
 
 				if (await this.resolveMiddlewares(req, res, endpoint.middleware as MiddlewareType[])) {
@@ -179,7 +193,7 @@ export class Application {
 				let query: { [key: string]: any };
 
 				try {
-					query = validate(qs.parse(querystring || ''), {
+					query = validate(parsers.qs!.parse(querystring || ''), {
 						type: 'object',
 						schema: endpoint.query,
 					}, 'query') as { [key: string]: any };
@@ -187,7 +201,7 @@ export class Application {
 					throw new HttpException(400, undefined, err);
 				}
 
-				let body: any = await parseBody(req, endpoint.bodyType || 'json', this.options.bodyOptions!);
+				let body: any = await parseBody(req, endpoint.bodyType || 'json', parsers, this.options.bodyOptions!);
 
 				if (body !== undefined && endpoint.bodyType !== 'stream') {
 					try {
@@ -238,6 +252,7 @@ export interface ApplicationOptions extends ServerOptions {
 	hooks?: {
 		endpointsLoad?(endpoints: EndpointBuild[]): any | PromiseLike<any>;
 	};
+	parsers?: Partial<Parsers>;
 }
 
 export type ControllerType = string | (new () => any);

@@ -2,7 +2,6 @@
 import * as contentType from 'content-type';
 import { IncomingForm } from 'formidable';
 import type { IncomingMessage } from 'http';
-import * as qs from 'querystring';
 import * as rawBody from 'raw-body';
 import type { Readable } from 'stream';
 
@@ -116,41 +115,49 @@ const BodyTypes: { [key: string]: BodyType } = {
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: 'json',
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<JsonData>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: 'urlencoded',
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<UrlencodedData>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: 'multipart',
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<MultipartData>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: 'stream',
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<Readable>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: 'text',
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<string>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: 'raw',
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<Buffer>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: BodyType,
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<string | Buffer | JsonData | UrlencodedData | MultipartData | Readable>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: BodyType,
+	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<undefined | string | Buffer | JsonData | UrlencodedData | MultipartData | Readable> {
 	if (req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH' && req.method !== 'DELETE') {
@@ -179,7 +186,7 @@ export async function parseBody(
 
 				const raw = await rawBody(req, parseOptions as { encoding: string });
 
-				return JSON.parse(raw) as JsonData;
+				return parsers.json.parse(raw) as JsonData;
 			}
 
 			case 'urlencoded':
@@ -190,7 +197,7 @@ export async function parseBody(
 
 				const raw = await rawBody(req, parseOptions as { encoding: string });
 
-				return qs.parse(raw) as UrlencodedData;
+				return parsers.qs.parse(raw) as UrlencodedData;
 			}
 
 			case 'multipart':
@@ -270,4 +277,15 @@ export interface UrlencodedData {
 }
 export interface MultipartData {
 	[key: string]: string | string[] | File;
+}
+
+export interface Parsers {
+	json: {
+		parse(text: string): any;
+		stringify(value: any): string;
+	};
+	qs: {
+		parse(text: string): any;
+		stringify(value: { [key: string]: any }): string;
+	};
 }
