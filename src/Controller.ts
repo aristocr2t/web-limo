@@ -98,6 +98,8 @@ type Schema<B extends ValidationSchema | undefined> = {
 	[P in keyof B]: B[P] extends PrimitiveRule[] ? SchemaProp<B[P][number]> : B[P] extends PrimitiveRule ? SchemaProp<B[P]> : never;
 };
 
+type PromiseType<T> = T extends PromiseLike<any> ? Parameters<NonNullable<Parameters<T['then']>[0]>>[0] : T;
+
 export function Endpoint<
 	Options extends EndpointOptions,
 	Query = Options['query'],
@@ -105,16 +107,16 @@ export function Endpoint<
 	BodyRule = Options['bodyRule'],
 	BodyType = Options['bodyType'],
 	BodyParserValue = Options['bodyParser'] extends (...args: any[]) => any ? ReturnType<Options['bodyParser']> : undefined,
+	AuthHandlerValue = Options['authHandler'] extends (...args: any[]) => any ? PromiseType<ReturnType<Options['authHandler']>> : null,
 >(options: Options): <
 	Method extends (
 		requestData: RequestData<
-		any,
+		AuthHandlerValue,
 		Query extends ValidationSchema ? Schema<Query> : any,
 		BodyType extends 'stream' ? IncomingMessage :
 			BodyType extends 'text' ? string :
 				BodyType extends 'raw' ? Buffer :
-					Body extends ValidationSchema ?
-						BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
+					Body extends ValidationSchema ? BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
 						BodyRule extends PrimitiveRule[] ? SchemaProp<BodyRule[number]> :
 							BodyRule extends PrimitiveRule ? SchemaProp<BodyRule> :
 								BodyParserValue extends undefined ? any : BodyParserValue
@@ -184,12 +186,12 @@ export type EndpointBuild = EndpointOptions & {
 
 export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
 	method: HttpMethod;
-	body: Body;
+	auth: Auth;
 	query: Query;
+	body: Body;
 	params: string[];
 	cookies: Cookies;
 	headers: IncomingHttpHeaders;
-	auth: Auth | null;
 }
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
