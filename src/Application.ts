@@ -166,7 +166,7 @@ export class Application {
 				let params!: string[];
 				const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
 
-				if (!endpoint || endpoint.method !== req.method) {
+				if (!endpoint || (req.method !== endpoint.method && req.method !== 'HEAD' && endpoint.method !== 'GET')) {
 					throw new HttpException(404, undefined, new Error('Not found'));
 				}
 

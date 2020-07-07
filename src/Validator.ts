@@ -58,29 +58,25 @@ export class Validator {
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
-		try {
-			x = Validator[rule.type](x, rule as any, propertyPath, isQuery);
+		if (rule.default !== undefined) {
+			const defaultValue = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
 
-			if (rule.parse) {
-				return rule.parse(x, rule);
-			}
-
-			return x;
-		} catch (err) {
-			if (rule.default === undefined) {
-				throw err;
-			} else {
-				const defaultValue = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
-
-				if (isEqual(x, defaultValue)) {
-					if (rule.parse) {
-						return rule.parse(x, rule);
-					}
-
-					return x;
+			if (isEqual(x, defaultValue)) {
+				if (rule.parse) {
+					return rule.parse(x, rule);
 				}
+
+				return x;
 			}
 		}
+
+		x = Validator[rule.type](x, rule as any, propertyPath, isQuery);
+
+		if (rule.parse) {
+			return rule.parse(x, rule);
+		}
+
+		return x;
 	}
 
 	static boolean(x: unknown, rule: Partial<BooleanRule>, propertyPath: string): boolean {
