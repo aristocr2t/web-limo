@@ -21,26 +21,26 @@ export class ValidationError extends Error {
 }
 
 export class Validator {
-	static validate = (x: unknown, rule: ValidationRule, propertyPath: string = 'this'): any => {
+	static validate = (x: unknown, rule: ValidationRule, propertyPath: string = 'this', isQuery: boolean = false): any => {
 		if (Array.isArray(rule)) {
 			for (const r of rule) {
 				try {
-					return Validator.resolve(x, r, propertyPath);
+					return Validator.resolve(x, r, propertyPath, isQuery);
 				} catch {}
 			}
 
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
-		return Validator.resolve(x, rule, propertyPath);
+		return Validator.resolve(x, rule, propertyPath, isQuery);
 	};
 
-	protected static resolve(x: unknown, rule: PrimitiveRule, propertyPath: string): any {
+	protected static resolve(x: unknown, rule: PrimitiveRule, propertyPath: string, isQuery: boolean): any {
 		if (!rule) {
 			throw new TypeError('Rule is null or undefined');
 		}
 
-		if (x === null || x === undefined) {
+		if (x === null || x === undefined || (isQuery && x === '' && rule.type !== 'string')) {
 			if (rule.default !== undefined) {
 				x = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
 
@@ -58,25 +58,29 @@ export class Validator {
 			throw new ValidationError(propertyPath, x, rule);
 		}
 
-		if (rule.default !== undefined) {
-			const defaultValue = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
+		try {
+			x = Validator[rule.type](x, rule as any, propertyPath, isQuery);
 
-			if (isEqual(x, defaultValue)) {
-				if (rule.parse) {
-					return rule.parse(x, rule);
+			if (rule.parse) {
+				return rule.parse(x, rule);
+			}
+
+			return x;
+		} catch (err) {
+			if (rule.default === undefined) {
+				throw err;
+			} else {
+				const defaultValue = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
+
+				if (isEqual(x, defaultValue)) {
+					if (rule.parse) {
+						return rule.parse(x, rule);
+					}
+
+					return x;
 				}
-
-				return x;
 			}
 		}
-
-		x = Validator[rule.type](x, rule as any, propertyPath);
-
-		if (rule.parse) {
-			return rule.parse(x, rule);
-		}
-
-		return x;
 	}
 
 	static boolean(x: unknown, rule: Partial<BooleanRule>, propertyPath: string): boolean {
@@ -167,7 +171,7 @@ export class Validator {
 		return date;
 	}
 
-	static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string): any[] {
+	static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string, isQuery: boolean = false): any[] {
 		if (!Array.isArray(x)) {
 			throw new ValidationError(propertyPath, x, rule as ArrayRule);
 		}
@@ -186,7 +190,7 @@ export class Validator {
 			const nestedRule = rule.nested;
 
 			for (let i = 0, len = x.length, v: any; i < len; i++) {
-				v = this.validate(x[i], nestedRule, `${propertyPath}[${i}]`);
+				v = this.validate(x[i], nestedRule, `${propertyPath}[${i}]`, isQuery);
 
 				if (v) {
 					out.push(v);
@@ -199,7 +203,7 @@ export class Validator {
 		return out;
 	}
 
-	static object(x: unknown, rule: Partial<ObjectRule>, propertyPath: string): object {
+	static object(x: unknown, rule: Partial<ObjectRule>, propertyPath: string, isQuery: boolean = false): object {
 		if (!x || typeof x !== 'object') {
 			throw new ValidationError(propertyPath, x, rule as ObjectRule);
 		}
@@ -210,14 +214,14 @@ export class Validator {
 			const entries = Object.entries(rule.schema);
 
 			for (const [key, schemaRule] of entries) {
-				(out as { [key: string]: any })[key] = this.validate((x as { [key: string]: any })[key], schemaRule, `${propertyPath}.${key}`);
+				(out as { [key: string]: any })[key] = this.validate((x as { [key: string]: any })[key], schemaRule, `${propertyPath}.${key}`, isQuery);
 			}
 		} else if (rule.nested) {
 			const keys = Object.keys(x as any);
 			const nestedRule = rule.nested;
 
 			for (const key of keys) {
-				(out as { [key: string]: any })[key] = this.validate((x as { [key: string]: any })[key], nestedRule, `${propertyPath}.${key}`);
+				(out as { [key: string]: any })[key] = this.validate((x as { [key: string]: any })[key], nestedRule, `${propertyPath}.${key}`, isQuery);
 			}
 		}
 

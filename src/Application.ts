@@ -161,7 +161,7 @@ export class Application {
 					return;
 				}
 
-				const [location, querystring] = (req.url || '').split('?', 1) as [string, string?];
+				const [location, querystring] = (req.url || '').split('?', 2) as [string, string?];
 
 				let params!: string[];
 				const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
@@ -196,7 +196,7 @@ export class Application {
 					query = validate(parsers.qs!.parse(querystring || ''), {
 						type: 'object',
 						schema: endpoint.query,
-					}, 'query') as { [key: string]: any };
+					}, 'query', true) as { [key: string]: any };
 				} catch (err) {
 					throw new HttpException(400, undefined, err);
 				}
@@ -205,14 +205,16 @@ export class Application {
 
 				if (body !== undefined && endpoint.bodyType !== 'stream') {
 					try {
+						const isQuery = endpoint.bodyType === 'multipart' || endpoint.bodyType === 'urlencoded';
+
 						if (endpoint.body) {
 							body = validate(body, {
 								type: 'object',
 								schema: endpoint.body,
 								parse: endpoint.bodyParser,
-							}, 'body') as any;
+							}, 'body', isQuery) as any;
 						} else if (endpoint.bodyRule) {
-							body = validate(body, endpoint.bodyRule, 'body') as any;
+							body = validate(body, endpoint.bodyRule, 'body', isQuery) as any;
 						}
 					} catch (err) {
 						throw new HttpException(400, undefined, err);
