@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { inspect } from 'util';
 
@@ -12,7 +13,7 @@ export class ValidationError extends Error {
 	constructor(
 		readonly propertyPath: string,
 		readonly value: any,
-		readonly rule: DefaultValidationRule | DefaultValidationRule[],
+		readonly rule: ValidationRule,
 	) {
 		super(`${propertyPath} ${inspect(value)} does not apply rule ${inspect(rule)}`);
 		Object.setPrototypeOf(this, ValidationError.prototype);
@@ -20,7 +21,7 @@ export class ValidationError extends Error {
 }
 
 export class Validator {
-	static validate = <T>(x: T, rule: ValidationRule, propertyPath: string = 'this'): T | undefined => {
+	static validate = (x: unknown, rule: ValidationRule, propertyPath: string = 'this'): any => {
 		if (Array.isArray(rule)) {
 			for (const r of rule) {
 				try {
@@ -34,37 +35,51 @@ export class Validator {
 		return Validator.resolve(x, rule, propertyPath);
 	};
 
-	private static resolve<T>(x: T, rule: PrimitiveValidationRule, propertyPath: string): T | undefined {
+	private static resolve(x: unknown, rule: PrimitiveRule, propertyPath: string): any {
 		if (!rule) {
-			throw new TypeError('ValidationRule is null or undefined');
+			throw new TypeError('Rule is null or undefined');
 		}
 
-		if (x === undefined || x === null) {
+		if (x === null || x === undefined) {
 			if (rule.default !== undefined) {
-				if (typeof rule.default === 'function') {
-					return rule.default(x, rule) as T | undefined;
+				x = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
+
+				if (rule.parse) {
+					return rule.parse(x, rule);
 				}
 
-				return rule.default as T | undefined;
+				return x;
 			}
 
 			if (rule.optional) {
 				return undefined;
 			}
 
-			return Validator[rule.type](x, rule as any, propertyPath) as T;
+			throw new ValidationError(propertyPath, x, rule);
 		}
 
-		const defaultValue = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
+		if (rule.default !== undefined) {
+			const defaultValue = typeof rule.default === 'function' ? rule.default(x, rule) : rule.default;
 
-		if (isEqual(x, defaultValue)) {
-			return x;
+			if (isEqual(x, defaultValue)) {
+				if (rule.parse) {
+					return rule.parse(x, rule);
+				}
+
+				return x;
+			}
 		}
 
-		return Validator[rule.type](x, rule as any, propertyPath) as T;
+		x = Validator[rule.type](x, rule as any, propertyPath);
+
+		if (rule.parse) {
+			return rule.parse(x, rule);
+		}
+
+		return x;
 	}
 
-	private static boolean(x: any, rule: Partial<BooleanValidationRule>, propertyPath: string): boolean {
+	private static boolean(x: unknown, rule: Partial<BooleanRule>, propertyPath: string): boolean {
 		if (x === true || rule.truthy?.includes(x)) {
 			return true;
 		}
@@ -73,50 +88,39 @@ export class Validator {
 			return false;
 		}
 
-		throw new ValidationError(propertyPath, x, rule);
+		throw new ValidationError(propertyPath, x, rule as BooleanRule);
 	}
 
-	private static number(x: any, rule: Partial<NumberValidationRule>, propertyPath: string): number {
-		if (!isFinite(x)) {
-			throw new ValidationError(propertyPath, x, rule);
+	private static number(x: unknown, rule: Partial<NumberRule>, propertyPath: string): number {
+		if (!isFinite(x as number)) {
+			throw new ValidationError(propertyPath, x, rule as NumberRule);
 		}
 
-		const num = +x;
+		const num = +(x as number);
 
 		if (
 			(rule.integer && !Number.isInteger(num))
-			|| (isFinite(rule.min!) && num < (rule.min!))
-			|| (isFinite(rule.max!) && num > (rule.max!))
+			|| (Number.isFinite(rule.min!) && num < rule.min!)
+			|| (Number.isFinite(rule.max!) && num > rule.max!)
 			|| (rule.values && !rule.values.includes(num))
 		) {
-			throw new ValidationError(propertyPath, x, rule);
+			throw new ValidationError(propertyPath, x, rule as NumberRule);
+		}
+
+		if (Number.isFinite(rule.digits!) && rule.digits! > 0) {
+			const m = 10 ** +rule.digits!;
+
+			return Math[rule.roundingFn || 'round'](num * m) / m;
 		}
 
 		return num;
 	}
 
-	private static bigint(x: unknown, rule: Partial<BigintValidationRule>, propertyPath: string): bigint {
-		if (!isFinite(x as number)) {
-			throw new ValidationError(propertyPath, x, rule);
-		}
-
-		const num = BigInt(x);
-
-		if (
-			(isFinite(rule.min?.toString() as unknown as number) && num < (rule.min!))
-			|| (isFinite(rule.max?.toString() as unknown as number) && num > (rule.max!))
-		) {
-			throw new ValidationError(propertyPath, x, rule);
-		}
-
-		return num;
-	}
-
-	private static string(x: unknown, rule: Partial<StringValidationRule>, propertyPath: string): string {
+	private static string(x: unknown, rule: Partial<StringRule>, propertyPath: string): string {
 		if (typeof x === 'number') {
 			x = x.toString();
 		} else if (typeof x !== 'string') {
-			throw new ValidationError(propertyPath, x, rule);
+			throw new ValidationError(propertyPath, x, rule as StringRule);
 		}
 
 		let str = x as string;
@@ -129,7 +133,7 @@ export class Validator {
 			|| (typeof rule.pattern === 'string' && !str.includes(rule.pattern))
 			|| (rule.pattern instanceof RegExp && !rule.pattern.test(str))
 		) {
-			throw new ValidationError(propertyPath, x, rule);
+			throw new ValidationError(propertyPath, x, rule as StringRule);
 		}
 
 		if (rule.trim) {
@@ -142,26 +146,22 @@ export class Validator {
 			}
 		}
 
-		if (typeof rule.custom === 'function') {
-			return rule.custom(str, rule);
-		}
-
 		return str as string;
 	}
 
-	private static date(x: unknown, rule: Partial<DateValidationRule>, propertyPath: string): Date | string {
+	private static date(x: unknown, rule: Partial<DateRule>, propertyPath: string): Date | string {
 		const date: Date = new Date(x as Date);
 
 		if (isNaN(+date)) {
-			throw new ValidationError(propertyPath, x, rule);
+			throw new ValidationError(propertyPath, x, rule as DateRule);
 		}
 
-		const num = +date;
-		rule.min = new Date(rule.min as any);
-		rule.max = new Date(rule.max as any);
+		const ts = +date;
+		const min = +new Date(typeof rule.min === 'function' ? rule.min() : rule.min!);
+		const max = +new Date(typeof rule.max === 'function' ? rule.max() : rule.max!);
 
-		if ((!isNaN(+rule.min) && num < +rule.min) || (!isNaN(+rule.max) && num > +rule.max)) {
-			throw new ValidationError(propertyPath, x, rule);
+		if ((isFinite(min) && ts < min) || (isFinite(max) && ts > max)) {
+			throw new ValidationError(propertyPath, x, rule as DateRule);
 		}
 
 		if (rule.dateonly) {
@@ -171,9 +171,9 @@ export class Validator {
 		return date;
 	}
 
-	private static array(x: any, rule: Partial<ArrayValidationRule>, propertyPath: string): any[] {
+	private static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string): any[] {
 		if (!Array.isArray(x)) {
-			throw new ValidationError(propertyPath, x, rule);
+			throw new ValidationError(propertyPath, x, rule as ArrayRule);
 		}
 
 		if (
@@ -181,82 +181,85 @@ export class Validator {
 			|| (Number.isFinite(rule.min!) && x.length < (rule.min!))
 			|| (Number.isFinite(rule.max!) && x.length > (rule.max!))
 		) {
-			throw new ValidationError(propertyPath, x, rule);
+			throw new ValidationError(propertyPath, x, rule as ArrayRule);
 		}
 
-		let out = [];
+		let out: any[] = [];
 
 		if (rule.nested) {
 			const nestedRule = rule.nested;
 
-			for (let i = 0, len = x.length; i < len; i++) {
-				out.push(this.validate(x[i], nestedRule, `${propertyPath}[${i}]`));
+			for (let i = 0, len = x.length, v: any; i < len; i++) {
+				v = this.validate(x[i], nestedRule, `${propertyPath}[${i}]`);
+
+				if (v) {
+					out.push(v);
+				}
 			}
 		} else {
 			out = Array.from(x);
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 		return out;
 	}
 
-	private static object<T extends {}>(x: T, rule: Partial<ObjectValidationRule>, propertyPath: string): T {
+	private static object(x: unknown, rule: Partial<ObjectRule>, propertyPath: string): object {
 		if (!x || typeof x !== 'object') {
-			throw new ValidationError(propertyPath, x, rule);
+			throw new ValidationError(propertyPath, x, rule as ObjectRule);
 		}
 
-		const out = {} as T;
+		const out = {};
 
 		if (rule.schema) {
 			const entries = Object.entries(rule.schema);
 
 			for (const [key, schemaRule] of entries) {
-				out[key as keyof T] = this.validate(x[key as keyof T], schemaRule, `${propertyPath}.${key}`) as T[keyof T];
+				(out as { [key: string]: any })[key] = this.validate((x as { [key: string]: any })[key], schemaRule, `${propertyPath}.${key}`);
 			}
 		} else if (rule.nested) {
-			const keys = Object.keys(x);
+			const keys = Object.keys(x as any);
 			const nestedRule = rule.nested;
 
 			for (const key of keys) {
-				out[key as keyof T] = this.validate(x[key as keyof T], nestedRule, `${propertyPath}.${key}`) as T[keyof T];
+				(out as { [key: string]: any })[key] = this.validate((x as { [key: string]: any })[key], nestedRule, `${propertyPath}.${key}`);
 			}
 		}
 
-		return x;
+		return out;
 	}
 }
 
 export const { validate } = Validator;
 
-export type ValidationSchema<T = any> = {
-	[P in keyof T]: ValidationRule;
-};
+export interface ValidationSchema {
+	[key: string]: ValidationRule;
+}
 
-export type PrimitiveValidationRule =
-| BooleanValidationRule
-| StringValidationRule
-| NumberValidationRule
-| BigintValidationRule
-| DateValidationRule
-| ArrayValidationRule
-| ObjectValidationRule;
+export type PrimitiveRule<T = any> =
+| BooleanRule<T>
+| StringRule<T>
+| NumberRule<T>
+| DateRule<T>
+| ArrayRule<T>
+| ObjectRule<T>;
 
-export type ValidationRule =
-| PrimitiveValidationRule
-| PrimitiveValidationRule[];
+export type ValidationRule<T = any> =
+| PrimitiveRule<T>
+| PrimitiveRule<T>[];
 
-export interface DefaultValidationRule<T = any> {
-	default?: ((x: any, r: ValidationRule) => T | undefined) | T | undefined;
+export interface DefaultRule<T> {
+	default?: ((x: any, r: ValidationRule) => any) | any;
+	parse?(x: any, rule: PrimitiveRule): T;
 	optional?: boolean;
 }
 
-export interface BooleanValidationRule extends DefaultValidationRule {
+export interface BooleanRule<T = boolean> extends DefaultRule<T> {
 	type: 'boolean';
 	truthy?: any[];
 	falsy?: any[];
 }
 
-export interface StringValidationRule extends DefaultValidationRule {
+export interface StringRule<T = string> extends DefaultRule<T> {
 	type: 'string';
 	min?: number;
 	max?: number;
@@ -265,33 +268,28 @@ export interface StringValidationRule extends DefaultValidationRule {
 	pattern?: string | RegExp;
 	trim?: boolean;
 	escape?: StringEscapeLevels;
-	custom?(x: any, rule: Partial<StringValidationRule>): string;
 }
 
 export type StringEscapeLevels = 1 | 2;
 
-export interface NumberValidationRule extends DefaultValidationRule {
+export interface NumberRule<T = number> extends DefaultRule<T> {
 	type: 'number';
 	integer?: boolean;
+	digits?: number;
+	roundingFn?: 'floor' | 'round' | 'ceil';
 	min?: number;
 	max?: number;
 	values?: number[];
 }
 
-export interface BigintValidationRule extends DefaultValidationRule {
-	type: 'bigint';
-	min?: bigint;
-	max?: bigint;
-}
-
-export interface DateValidationRule extends DefaultValidationRule {
+export interface DateRule<T = Date> extends DefaultRule<T> {
 	type: 'date';
-	min?: number | string | Date;
-	max?: number | string | Date;
+	min?: number | string | Date | (() => number | string | Date);
+	max?: number | string | Date | (() => number | string | Date);
 	dateonly?: boolean;
 }
 
-export interface ArrayValidationRule extends DefaultValidationRule {
+export interface ArrayRule<T = any[]> extends DefaultRule<T> {
 	type: 'array';
 	nested?: ValidationRule;
 	length?: number;
@@ -299,7 +297,7 @@ export interface ArrayValidationRule extends DefaultValidationRule {
 	max?: number;
 }
 
-export interface ObjectValidationRule extends DefaultValidationRule {
+export interface ObjectRule<T = object> extends DefaultRule<T> {
 	type: 'object';
 	nested?: ValidationRule;
 	schema?: ValidationSchema;

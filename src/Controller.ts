@@ -2,13 +2,13 @@ import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http'
 
 import { BodyType, Cookies, SetMetadata, parseName } from './utils';
 import type {
-	ArrayValidationRule,
-	BigintValidationRule,
-	BooleanValidationRule,
-	DateValidationRule,
-	NumberValidationRule,
-	ObjectValidationRule,
-	StringValidationRule,
+	ArrayRule,
+	BooleanRule,
+	DateRule,
+	NumberRule,
+	ObjectRule,
+	PrimitiveRule,
+	StringRule,
 	ValidationRule,
 	ValidationSchema,
 } from './Validator';
@@ -78,16 +78,16 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 
 type ArrayElement<V, R = never> = V extends any[] ? V[number] : R;
 
-type SchemaProp<V> = V extends StringValidationRule ? ArrayElement<V['values'], string> :
-	V extends NumberValidationRule ? ArrayElement<V['values'], number> :
-		V extends BooleanValidationRule ? boolean :
-			V extends BigintValidationRule ? bigint | string :
-				V extends DateValidationRule ? Date | string :
-					V extends ArrayValidationRule ? ArrayElement<V['nested'], SchemaProp<V>>[] :
-						V extends ObjectValidationRule ? (
-							V['schema'] extends object ? Schema<V['schema']> :
+type SchemaProp<Rule, RuleParse = Rule extends PrimitiveRule ? Rule['parse'] : never> = Rule extends StringRule ? ArrayElement<Rule['values'], string> :
+	RuleParse extends (...args: any[]) => any ? ReturnType<RuleParse> :
+		Rule extends NumberRule ? ArrayElement<Rule['values'], number> :
+			Rule extends BooleanRule ? boolean :
+				Rule extends DateRule ? Rule['dateonly'] extends true ? string : Date :
+					Rule extends ArrayRule ? ArrayElement<Rule['nested'], SchemaProp<Rule>>[] :
+						Rule extends ObjectRule ? (
+							Rule['schema'] extends object ? Schema<Rule['schema']> :
 								(
-									V['nested'] extends ValidationRule ? { [key: string]: ArrayElement<V['nested'], SchemaProp<V>> } : { [key: string]: any }
+									Rule['nested'] extends ValidationRule ? { [key: string]: ArrayElement<Rule['nested'], SchemaProp<Rule>> } : { [key: string]: any }
 								)
 						) : never;
 
@@ -101,6 +101,7 @@ export function Endpoint<
 	Body = Options['body'],
 	BodyRule = Options['bodyRule'],
 	BodyType = Options['bodyType'],
+	BodyParserValue = Options['bodyParser'] extends (...args: any[]) => any ? ReturnType<Options['bodyParser']> : undefined,
 >(options: Options): <
 	Method extends (
 		requestData: RequestData<
@@ -109,8 +110,10 @@ export function Endpoint<
 		BodyType extends 'stream' ? IncomingMessage :
 			BodyType extends 'text' ? string :
 				BodyType extends 'raw' ? Buffer :
-					Body extends ValidationSchema ? Schema<Body> :
-						BodyRule extends ValidationRule ? SchemaProp<BodyRule> : any
+					Body extends ValidationSchema ?
+						BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
+						BodyRule extends ValidationRule ? SchemaProp<BodyRule> :
+							BodyParserValue extends undefined ? any : BodyParserValue
 		>,
 		context: any,
 	) => any | PromiseLike<any>,
@@ -132,10 +135,6 @@ export function Endpoint<
 					options.body[key] = value.flat();
 				}
 			}
-		}
-
-		if (Array.isArray(options.bodyRule)) {
-			options.bodyRule = options.bodyRule.flat();
 		}
 
 		return (SetMetadata('__endpoints', options) as MethodDecorator)(target, propertyKey, descriptor);
@@ -163,6 +162,7 @@ export interface EndpointOptions<
 	body?: Body;
 	bodyRule?: BodyRule;
 	bodyType?: BodyType;
+	bodyParser?(x: unknown, rule: ObjectRule): any;
 	authHandler?: AuthHandler | null;
 	middleware?: MiddlewareType | MiddlewareType[];
 	responseHandler?: ResponseHandler;

@@ -209,6 +209,7 @@ export class Application {
 							body = validate(body, {
 								type: 'object',
 								schema: endpoint.body,
+								parse: endpoint.bodyParser,
 							}, 'body') as any;
 						} else if (endpoint.bodyRule) {
 							body = validate(body, endpoint.bodyRule, 'body') as any;
