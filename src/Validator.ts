@@ -35,7 +35,7 @@ export class Validator {
 		return Validator.resolve(x, rule, propertyPath);
 	};
 
-	private static resolve(x: unknown, rule: PrimitiveRule, propertyPath: string): any {
+	protected static resolve(x: unknown, rule: PrimitiveRule, propertyPath: string): any {
 		if (!rule) {
 			throw new TypeError('Rule is null or undefined');
 		}
@@ -79,7 +79,7 @@ export class Validator {
 		return x;
 	}
 
-	private static boolean(x: unknown, rule: Partial<BooleanRule>, propertyPath: string): boolean {
+	static boolean(x: unknown, rule: Partial<BooleanRule>, propertyPath: string): boolean {
 		if (x === true || rule.truthy?.includes(x)) {
 			return true;
 		}
@@ -91,7 +91,7 @@ export class Validator {
 		throw new ValidationError(propertyPath, x, rule as BooleanRule);
 	}
 
-	private static number(x: unknown, rule: Partial<NumberRule>, propertyPath: string): number {
+	static number(x: unknown, rule: Partial<NumberRule>, propertyPath: string): number {
 		if (!isFinite(x as number)) {
 			throw new ValidationError(propertyPath, x, rule as NumberRule);
 		}
@@ -116,7 +116,7 @@ export class Validator {
 		return num;
 	}
 
-	private static string(x: unknown, rule: Partial<StringRule>, propertyPath: string): string {
+	static string(x: unknown, rule: Partial<StringRule>, propertyPath: string): string {
 		if (typeof x === 'number') {
 			x = x.toString();
 		} else if (typeof x !== 'string') {
@@ -149,7 +149,7 @@ export class Validator {
 		return str as string;
 	}
 
-	private static date(x: unknown, rule: Partial<DateRule>, propertyPath: string): Date | string {
+	static date(x: unknown, rule: Partial<DateRule>, propertyPath: string): Date {
 		const date: Date = new Date(x as Date);
 
 		if (isNaN(+date)) {
@@ -164,14 +164,10 @@ export class Validator {
 			throw new ValidationError(propertyPath, x, rule as DateRule);
 		}
 
-		if (rule.dateonly) {
-			return date.toISOString().substring(0, 10);
-		}
-
 		return date;
 	}
 
-	private static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string): any[] {
+	static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string): any[] {
 		if (!Array.isArray(x)) {
 			throw new ValidationError(propertyPath, x, rule as ArrayRule);
 		}
@@ -203,7 +199,7 @@ export class Validator {
 		return out;
 	}
 
-	private static object(x: unknown, rule: Partial<ObjectRule>, propertyPath: string): object {
+	static object(x: unknown, rule: Partial<ObjectRule>, propertyPath: string): object {
 		if (!x || typeof x !== 'object') {
 			throw new ValidationError(propertyPath, x, rule as ObjectRule);
 		}
@@ -286,7 +282,6 @@ export interface DateRule<T = Date> extends DefaultRule<T> {
 	type: 'date';
 	min?: number | string | Date | (() => number | string | Date);
 	max?: number | string | Date | (() => number | string | Date);
-	dateonly?: boolean;
 }
 
 export interface ArrayRule<T = any[]> extends DefaultRule<T> {

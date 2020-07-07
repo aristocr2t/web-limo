@@ -78,21 +78,24 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 
 type ArrayElement<V, R = never> = V extends any[] ? V[number] : R;
 
-type SchemaProp<Rule, RuleParse = Rule extends PrimitiveRule ? Rule['parse'] : never> = Rule extends StringRule ? ArrayElement<Rule['values'], string> :
-	RuleParse extends (...args: any[]) => any ? ReturnType<RuleParse> :
-		Rule extends NumberRule ? ArrayElement<Rule['values'], number> :
-			Rule extends BooleanRule ? boolean :
-				Rule extends DateRule ? Rule['dateonly'] extends true ? string : Date :
-					Rule extends ArrayRule ? ArrayElement<Rule['nested'], SchemaProp<Rule>>[] :
-						Rule extends ObjectRule ? (
-							Rule['schema'] extends object ? Schema<Rule['schema']> :
-								(
-									Rule['nested'] extends ValidationRule ? { [key: string]: ArrayElement<Rule['nested'], SchemaProp<Rule>> } : { [key: string]: any }
-								)
-						) : never;
+type SchemaProp<Rule extends PrimitiveRule> =
+NonNullable<Rule['parse']> extends (...args: any) => infer R ? R :
+	(
+		Rule extends StringRule ? ArrayElement<Rule['values'], string> :
+			Rule extends NumberRule ? ArrayElement<Rule['values'], number> :
+				Rule extends BooleanRule ? boolean :
+					Rule extends DateRule ? Date :
+						Rule extends ArrayRule ? ArrayElement<Rule['nested'], SchemaProp<Rule>>[] :
+							Rule extends ObjectRule ? (
+								Rule['schema'] extends ValidationSchema ? Schema<Rule['schema']> :
+									(
+										Rule['nested'] extends ValidationRule ? { [key: string]: ArrayElement<Rule['nested'], SchemaProp<Rule>> } : { [key: string]: any }
+									)
+							) : never
+	);
 
-type Schema<B> = {
-	[P in keyof B]: SchemaProp<B[P]>;
+type Schema<B extends ValidationSchema | undefined> = {
+	[P in keyof B]: B[P] extends PrimitiveRule[] ? SchemaProp<B[P][number]> : B[P] extends PrimitiveRule ? SchemaProp<B[P]> : never;
 };
 
 export function Endpoint<
@@ -112,8 +115,9 @@ export function Endpoint<
 				BodyType extends 'raw' ? Buffer :
 					Body extends ValidationSchema ?
 						BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
-						BodyRule extends ValidationRule ? SchemaProp<BodyRule> :
-							BodyParserValue extends undefined ? any : BodyParserValue
+						BodyRule extends PrimitiveRule[] ? SchemaProp<BodyRule[number]> :
+							BodyRule extends PrimitiveRule ? SchemaProp<BodyRule> :
+								BodyParserValue extends undefined ? any : BodyParserValue
 		>,
 		context: any,
 	) => any | PromiseLike<any>,
