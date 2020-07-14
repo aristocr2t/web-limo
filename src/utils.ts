@@ -20,29 +20,6 @@ export function parseName(name: string, postfix?: string): string {
 	return snakeCase(typeof postfix === 'string' ? name.replace(new RegExp(`${postfix}$`), '') : name);
 }
 
-export function SetMetadata(key: string, data: any): ClassDecorator | MethodDecorator | PropertyDecorator {
-	return <T>(target: any, propertyKey?: string, descriptor?: TypedPropertyDescriptor<T>) => {
-		if (propertyKey) {
-			target = target.constructor;
-
-			if (!target[key]) {
-				target[key] = {};
-			}
-
-			target[key][propertyKey] = data;
-
-			if (descriptor) {
-				return descriptor;
-			}
-		} else {
-			target[key] = data;
-
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			return target;
-		}
-	};
-}
-
 export function isEqual(a: any, b: any, checkPrototype: boolean = false): boolean {
 	if (a === b) {
 		return true;

@@ -1,4 +1,6 @@
+import 'reflect-metadata';
+
 export * from './utils';
-export * from './Application';
-export * from './Controller';
-export * from './Validator';
+export * from './application';
+export * from './decorators';
+export * from './validator';

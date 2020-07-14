@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'http';
 
-import { BodyType, Cookies, SetMetadata, parseName } from './utils';
+import { BodyType, Cookies, parseName } from './utils';
 import type {
 	ArrayRule,
 	BooleanRule,
@@ -11,11 +12,48 @@ import type {
 	StringRule,
 	ValidationRule,
 	ValidationSchema,
-} from './Validator';
+} from './validator';
 
-export function Controller(options?: ControllerOptions): <Target extends (new (...args: any[]) => any)>(target: Target) => Target | void {
-	return <Target extends (new (...args: any[]) => any)>(target: Target): Target | void => {
-		const ControllerClass = target as unknown as $ControllerType;
+export function Injectable(options?: InjectableOptions): ClassDecorator {
+	return (target) => {
+		if (!options) {
+			options = {};
+		}
+
+		if (!options.deps) {
+			options.deps = (Reflect.getMetadata('design:paramtypes', target) as any[] || [])
+				.map((pt, i) => Reflect.getMetadata('weblimo:inject', target, i.toString()) || pt);
+		}
+
+		if (!(options as unknown as { optionalDeps: { index: number; defaultValue: any }[] }).optionalDeps) {
+			(options as unknown as { optionalDeps: { index: number; defaultValue: any }[] }).optionalDeps = (options.deps.map((_, i) => {
+				if (Reflect.hasMetadata('weblimo:optional', target, i.toString())) {
+					return { index: i, defaultValue: Reflect.getMetadata('weblimo:optional', target, i.toString()) };
+				}
+			})).filter(Boolean) as { index: number; defaultValue: any }[];
+		}
+
+		Reflect.metadata('weblimo:injectable', options)(target);
+	};
+}
+
+export function Inject(token: string): ParameterDecorator {
+	return (target, _, index) => {
+		Reflect.metadata('weblimo:inject', token)(target, index.toString());
+	};
+}
+
+export function Optional(defaultValue?: any): ParameterDecorator {
+	return (target, _, index) => {
+		Reflect.metadata('weblimo:optional', defaultValue)(target, index.toString());
+	};
+}
+
+export const Req: ParameterDecorator = Inject('REQUEST');
+export const Res: ParameterDecorator = Inject('RESPONSE');
+
+export function Controller(options?: ControllerOptions): ClassDecorator {
+	return (target) => {
 		options = options ?? {};
 
 		if (!options.method) options.method = 'GET';
@@ -24,20 +62,25 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 		options.authHandler = options.authHandler ?? undefined;
 		options.middleware = [options.middleware].flat().filter(Boolean) as MiddlewareType[];
 		options.responseHandler = options.responseHandler ?? undefined;
-		options.contextResolver = options.contextResolver ?? undefined;
 
-		const endpoints = (ControllerClass.__endpoints || {}) as Record<string, EndpointBuild>;
+		let endpoints: { [key: string]: EndpointBuild };
+
+		if (Reflect.hasMetadata('weblimo:endpoints', target)) {
+			endpoints = Reflect.getMetadata('weblimo:endpoints', target);
+		} else {
+			endpoints = {};
+			Reflect.metadata('weblimo:endpoints', endpoints)(target);
+		}
+
 		const keys = Object.keys(endpoints) as (keyof typeof endpoints & string)[];
 
 		for (const key of keys) {
 			const endpoint = endpoints[key];
-			endpoint.controller = ControllerClass;
+			endpoint.controller = target as unknown as ControllerType;
 
 			if (!endpoint.method) {
 				endpoint.method = options.method || 'GET';
 			}
-
-			endpoint.contextResolver = options.contextResolver;
 
 			if (!endpoint.bodyType && (endpoint.method.includes('POST') || endpoint.method.includes('PUT') || endpoint.method.includes('PATCH') || endpoint.method.includes('DELETE'))) {
 				endpoint.bodyType = 'json';
@@ -72,7 +115,9 @@ export function Controller(options?: ControllerOptions): <Target extends (new (.
 			endpoint.locationTemplate = location;
 		}
 
-		return (SetMetadata('__controller', options) as ClassDecorator)(target);
+		Injectable(options)(target);
+
+		return Reflect.metadata('weblimo:controller', options)(target);
 	};
 }
 
@@ -124,12 +169,14 @@ export function Endpoint<
 		context: any,
 	) => any | PromiseLike<any>,
 >(
-	target: {},
+	target: { [key: string]: any },
 	propertyKey: string,
 	descriptor: TypedPropertyDescriptor<Method>,
 ) => TypedPropertyDescriptor<Method> | void {
 	return (target, propertyKey, descriptor) => {
+		const targetc = target.constructor;
 		(options as unknown as EndpointBuild).handler = target[propertyKey as keyof typeof target];
+		(options as unknown as EndpointBuild).descriptor = descriptor;
 
 		if (options.body) {
 			const keys = Object.keys(options.body);
@@ -143,15 +190,31 @@ export function Endpoint<
 			}
 		}
 
-		return (SetMetadata('__endpoints', options) as MethodDecorator)(target, propertyKey, descriptor);
+		let endpoints: { [key: string]: EndpointOptions };
+
+		if (Reflect.hasMetadata('weblimo:endpoints', targetc)) {
+			endpoints = Reflect.getMetadata('weblimo:endpoints', targetc);
+		} else {
+			endpoints = {};
+			Reflect.metadata('weblimo:endpoints', endpoints)(targetc);
+		}
+
+		endpoints[propertyKey] = options as EndpointOptions;
+
+		return descriptor;
 	};
 }
 
-export interface ControllerOptions {
+export interface InjectableOptions {
+	deps?: ((new (...args: any[]) => any) | string)[];
+}
+
+export type ControllerType = new (...args: any[]) => { [key: string]: any };
+
+export interface ControllerOptions extends InjectableOptions {
 	path?: string | (string | RegExp)[];
 	method?: HttpMethod;
 	useMethodNames?: boolean;
-	contextResolver?: ContextResolver;
 	authHandler?: AuthHandler;
 	middleware?: MiddlewareType | MiddlewareType[];
 	responseHandler?: ResponseHandler;
@@ -175,13 +238,12 @@ export interface EndpointOptions<
 }
 
 export type EndpointBuild = EndpointOptions & {
-	module: string;
 	method: HttpMethod;
-	controller: $ControllerType;
+	controller: new () => { [key: string]: any };
 	handler: EndpointHandler;
 	location: RegExp;
 	locationTemplate: string;
-	contextResolver?(req: IncomingMessage, res: ServerResponse): { [key: string]: any };
+	descriptor: PropertyDescriptor;
 };
 
 export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
@@ -201,9 +263,3 @@ export type EndpointHandler = (request: RequestData, context: { [key: string]: a
 export type AuthHandler = (req: IncomingMessage, res: ServerResponse) => any | PromiseLike<any>;
 export type ResponseHandler = (res: ServerResponse, err: Error | null, body: any) => void | PromiseLike<void>;
 export type MiddlewareType = (req: IncomingMessage, res: ServerResponse) => boolean | PromiseLike<boolean>;
-
-type $ControllerType = (new () => any) & {
-	__controller: ControllerOptions;
-	__endpoints: Record<string, EndpointBuild>;
-	__module: string;
-};

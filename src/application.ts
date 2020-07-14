@@ -1,36 +1,27 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
 import { IncomingMessage, Server, ServerOptions, ServerResponse, createServer } from 'http';
 import * as qs from 'querystring';
+import { inspect } from 'util';
 
-import { ControllerOptions, EndpointBuild, HttpMethod, MiddlewareType, ResponseHandler } from './Controller';
+import { ControllerType, EndpointBuild, HttpMethod, InjectableOptions, MiddlewareType, ResponseHandler } from './decorators';
 import { BodyOptions, HttpException, Parsers, parseBody, parseCookie } from './utils';
-import { validate } from './Validator';
+import { validate } from './validator';
 
 export class Application {
 	static async create(options: ApplicationOptions): Promise<Application> {
-		for (let i = 0, { length } = options.controllers, controller: ControllerType; i < length; i++) {
+		for (let i = 0, len = options.controllers.length, controller: ControllerType | string; i < len; i++) {
 			controller = options.controllers[i];
 
 			if (typeof controller === 'string') {
 				const imports = await import(controller);
-				options.controllers[i] = Object
+				const controllers = Object
 					.values(imports)
-					.filter(c => typeof c === 'function' && (c as $ControllerType).__controller)
-					.map((c) => {
-						(c as $ControllerType).__module = controller as string;
+					.filter(c => typeof c === 'function' && Reflect.hasMetadata('weblimo:endpoints', c)) as ControllerType[];
 
-						return c;
-					}) as any;
+				options.controllers.splice(i, 1, ...controllers);
 			}
 		}
-
-		options.controllers = options.controllers.flat().map(c => {
-			if (!(c as $ControllerType).__module) {
-				(c as $ControllerType).__module = '';
-			}
-
-			return c;
-		});
 
 		const application = new Application(options);
 
@@ -45,6 +36,29 @@ export class Application {
 	private constructor(options: ApplicationOptions) {
 		if (!options.middlewares) {
 			options.middlewares = [];
+		}
+
+		if (!options.providers) {
+			options.providers = [];
+		}
+
+		for (let i = 0, len = options.providers.length; i < len; i++) {
+			const provider = options.providers[i];
+
+			if (typeof provider === 'function') {
+				const injectableOptions = Reflect.getMetadata('weblimo:injectable', provider) as InjectableOptions;
+
+				if (!injectableOptions) {
+					throw new Error(`Need to provide "Injectable" decorator to class "${provider.name}"`);
+				}
+
+				options.providers[i] = {
+					provide: provider,
+					useClass: provider,
+					deps: injectableOptions.deps!,
+					optionalDeps: (injectableOptions as { [key: string]: any }).optionalDeps,
+				};
+			}
 		}
 
 		if (!options.bodyOptions) {
@@ -98,13 +112,9 @@ export class Application {
 
 	private loadEndpoints(): void {
 		this.endpoints.push(
-			...(this.options.controllers as $ControllerType[])
-				.filter(c => c.__endpoints)
-				.map(c => Object.values(c.__endpoints).map(e => {
-					e.module = c.__module;
-
-					return e;
-				}))
+			...this.options.controllers
+				.filter(c => typeof c === 'function' && Reflect.hasMetadata('weblimo:endpoints', c))
+				.map(c => Object.values(Reflect.getMetadata('weblimo:endpoints', c) as { [key: string]: EndpointBuild }))
 				.flat()
 		);
 
@@ -146,6 +156,48 @@ export class Application {
 		return false;
 	}
 
+	private resolveArgs(target: Provider, providers: (UseValueProvider | UseClassProvider | UseFactoryProvider)[], deps: ((new (...args: any[]) => any) | string)[], optionalDeps: { index: number; defaultValue: any }[] = []): any[] {
+		return deps.map((pt, i) => {
+			const provider = providers.find(p => (typeof p === 'object' ? p.provide === pt : p === pt));
+
+			if (!provider) {
+				const optionalDep = optionalDeps.find(x => x.index === i);
+
+				if (optionalDep) {
+					return optionalDep.defaultValue;
+				}
+
+				throw new Error(`Provider of param #${i} not found for "${typeof target === 'function' ? target.name : inspect(target, false, null, false)}"`);
+			}
+
+			if ('useClass' in provider) {
+				const args = this.resolveArgs(provider, providers, provider.deps!, provider.optionalDeps!);
+
+				return new provider.useClass(...args);
+			}
+
+			if ('useFactory' in provider) {
+				const args = this.resolveArgs(provider, providers, provider.deps);
+
+				return provider.useFactory(...args);
+			}
+
+			return provider.useValue;
+		});
+	}
+
+	private resolveConstructorProvider(constructor: ConstructorProvider, providers: (UseValueProvider | UseClassProvider | UseFactoryProvider)[]): { [key: string]: any } {
+		const options = Reflect.getMetadata('weblimo:injectable', constructor) as InjectableOptions;
+
+		if (!options) {
+			throw new Error(`Need to provide "Injectable" decorator to class "${constructor.name}"`);
+		}
+
+		const args = this.resolveArgs(constructor, providers, options.deps!, (options as { [key: string]: any }).optionalDeps);
+
+		return new constructor(...args);
+	}
+
 	private readonly responseHandler: ResponseHandler = (res: ServerResponse, err: Error | null, body: any) => {
 		if (err) {
 			return res.end(err.message);
@@ -182,11 +234,13 @@ export class Application {
 					responseHandler = endpoint.responseHandler;
 				}
 
-				const controller = new endpoint.controller();
+				const providers: (UseValueProvider | UseClassProvider | UseFactoryProvider)[] = [
+					{ provide: 'REQUEST', useValue: req },
+					{ provide: 'RESPONSE', useValue: res },
+					...this.options.providers! as (UseValueProvider | UseClassProvider | UseFactoryProvider)[],
+				];
 
-				if (endpoint.contextResolver) {
-					Object.assign(controller, endpoint.contextResolver(req, res));
-				}
+				const controller = this.resolveConstructorProvider(endpoint.controller, providers);
 
 				const auth = endpoint.authHandler ? await endpoint.authHandler(req, res) : null;
 
@@ -248,7 +302,8 @@ export class Application {
 export interface ApplicationOptions extends ServerOptions {
 	logger?: Logger;
 	middlewares?: MiddlewareType[];
-	controllers: ControllerType[];
+	controllers: (ControllerType | string)[];
+	providers?: Provider[];
 	responseHandler?: ResponseHandler;
 	defaultActionCode?: number | string;
 	bodyOptions?: BodyOptions;
@@ -258,7 +313,31 @@ export interface ApplicationOptions extends ServerOptions {
 	parsers?: Partial<Parsers>;
 }
 
-export type ControllerType = string | (new () => any);
+export type ConstructorProvider = (new (...args: any[]) => { [key: string]: any });
+
+export interface UseValueProvider {
+	provide: (new (...args: any[]) => any) | string;
+	useValue: any;
+}
+
+export interface UseClassProvider {
+	provide: (new (...args: any[]) => any) | string;
+	useClass: (new (...args: any[]) => any);
+	deps?: any[];
+	optionalDeps?: { index: number; defaultValue: any }[];
+}
+
+export interface UseFactoryProvider<D extends any[] = any[]> {
+	provide: (new (...args: any[]) => any) | string;
+	useFactory(...args: D): any;
+	deps: D;
+}
+
+export type Provider =
+| ConstructorProvider
+| UseValueProvider
+| UseClassProvider
+| UseFactoryProvider;
 
 export interface Logger {
 	log(...args: any[]): void;
@@ -268,9 +347,3 @@ export interface Logger {
 	error(...args: any[]): void;
 	dir(...args: any[]): void;
 }
-
-type $ControllerType = (new () => any) & {
-	__controller: ControllerOptions;
-	__endpoints: Record<string, EndpointBuild>;
-	__module: string;
-};

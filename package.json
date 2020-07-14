@@ -1,6 +1,6 @@
 {
 	"name": "web-limo",
-	"version": "3.8.4",
+	"version": "4.0.0",
 	"description": "node.js mvc server framework",
 	"main": "index.js",
 	"typings": "index.d.ts",
@@ -18,13 +18,14 @@
 		"http": "0.0.1-security",
 		"querystring": "^0.2.0",
 		"raw-body": "^2.4.1",
+		"reflect-metadata": "^0.1.13",
 		"util": "^0.12.3"
 	},
 	"devDependencies": {
 		"@types/content-type": "^1.1.3",
 		"@types/formidable": "^1.0.31",
-		"@typescript-eslint/eslint-plugin": "^3.6.0",
-		"@typescript-eslint/parser": "^3.6.0",
+		"@typescript-eslint/eslint-plugin": "^3.6.1",
+		"@typescript-eslint/parser": "^3.6.1",
 		"eslint": "^7.4.0",
 		"eslint-plugin-import": "^2.22.0",
 		"fs": "0.0.1-security",
