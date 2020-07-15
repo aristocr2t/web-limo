@@ -2,6 +2,7 @@
 import * as contentType from 'content-type';
 import { IncomingForm } from 'formidable';
 import type { IncomingMessage } from 'http';
+import { join as pathJoin } from 'path';
 import * as rawBody from 'raw-body';
 import type { Readable } from 'stream';
 
@@ -76,6 +77,15 @@ export function parseMultipart(req: IncomingMessage, options: MultipartOptions =
 		}
 
 		const form = new IncomingForm(options as any);
+
+		if (options.filename) {
+			(form as unknown as IncomingForm & { _uploadPath(this: IncomingForm, filename: string): string })._uploadPath = function(filename: string): string {
+				const name = options.filename!(filename);
+
+				return pathJoin(this.uploadDir, name);
+			};
+		}
+
 		form.parse(req, (err: Error | null, fields: Record<string, string | string[]>, files: Record<string, File>) => {
 			if (err) {
 				return reject(err);
@@ -268,6 +278,7 @@ export interface MultipartOptions {
 	maxFields?: number;
 	hash?: string | boolean;
 	multiples?: boolean;
+	filename?(filename: string): string;
 }
 
 export type JsonData = string | number | boolean | null | { [key: string]: JsonData } | JsonData[];
