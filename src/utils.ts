@@ -71,7 +71,7 @@ export function parseMultipart(req: IncomingMessage, options: MultipartOptions =
 			options.uploadDir = 'tmp';
 		}
 
-		if (typeof options.keepExtensions === 'boolean') {
+		if (typeof options.keepExtensions !== 'boolean') {
 			options.keepExtensions = true;
 		}
 
