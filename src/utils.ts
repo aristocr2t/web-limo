@@ -63,13 +63,19 @@ export interface File {
 	type: string;
 	lastModifiedDate?: Date;
 	hash?: string;
-
-	toJSON(): Object;
 }
 
-export function parseMultipart(req: IncomingMessage): Promise<MultipartData> {
+export function parseMultipart(req: IncomingMessage, options: MultipartOptions = {}): Promise<MultipartData> {
 	return new Promise<MultipartData>((resolve, reject) => {
-		const form = new IncomingForm();
+		if (!options.uploadDir) {
+			options.uploadDir = 'tmp';
+		}
+
+		if (typeof options.keepExtensions === 'boolean') {
+			options.keepExtensions = true;
+		}
+
+		const form = new IncomingForm(options as any);
 		form.parse(req, (err: Error | null, fields: Record<string, string | string[]>, files: Record<string, File>) => {
 			if (err) {
 				return reject(err);
@@ -149,7 +155,7 @@ export async function parseBody(
 
 	const parseOptions: rawBody.Options = {
 		length: req.headers['content-length'],
-		encoding: parameters.charset || 'utf8',
+		encoding: parameters.charset || 'utf-8',
 		limit: options[bodyType]?.limit,
 	};
 
@@ -183,7 +189,7 @@ export async function parseBody(
 					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
-				const data = await parseMultipart(req);
+				const data = await parseMultipart(req, options.multipart);
 
 				return data;
 			}
@@ -246,7 +252,23 @@ export interface Cookies {
 }
 
 export type BodyType = 'urlencoded' | 'json' | 'multipart' | 'text' | 'raw' | 'stream';
-export type BodyOptions = Partial<Record<BodyType, { limit: string }>>;
+
+export interface BodyOptions extends Partial<Record<BodyType, { limit?: number | string }>> {
+	multipart?: {
+		limit?: number | string;
+	} & MultipartOptions;
+}
+
+export interface MultipartOptions {
+	encoding?: string;
+	uploadDir?: string;
+	keepExtensions?: boolean;
+	maxFileSize?: number;
+	maxFieldsSize?: number;
+	maxFields?: number;
+	hash?: string | boolean;
+	multiples?: boolean;
+}
 
 export type JsonData = string | number | boolean | null | { [key: string]: JsonData } | JsonData[];
 export interface UrlencodedData {
