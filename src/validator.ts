@@ -98,7 +98,6 @@ export class Validator {
 
 		let num = +(x as number);
 
-
 		if (Number.isFinite(rule.digits!) && rule.digits! > 0) {
 			const m = 10 ** +rule.digits!;
 			const roundingFn = Math[rule.roundingFn || 'round'];

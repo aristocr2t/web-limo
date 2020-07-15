@@ -1,6 +1,6 @@
 {
 	"name": "web-limo",
-	"version": "4.0.2",
+	"version": "4.1.0",
 	"description": "node.js mvc server framework",
 	"main": "index.js",
 	"typings": "index.d.ts",

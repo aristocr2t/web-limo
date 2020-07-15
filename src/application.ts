@@ -216,9 +216,17 @@ export class Application {
 				const [location, querystring] = (req.url || '').split('?', 2) as [string, string?];
 
 				let params!: string[];
-				const endpoint = this.endpoints.find(ep => params = location.match(ep.location) as string[]);
+				const endpoint = this.endpoints.find(ep => {
+					params = location.match(ep.location) as string[];
 
-				if (!endpoint || (req.method !== endpoint.method && req.method !== 'HEAD' && endpoint.method !== 'GET')) {
+					if (params && (req.method === ep.method || (req.method === 'HEAD' && ep.method === 'GET'))) {
+						return true;
+					}
+
+					return false;
+				});
+
+				if (!endpoint) {
 					throw new HttpException(404, undefined, new Error('Not found'));
 				}
 
