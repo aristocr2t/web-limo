@@ -21,7 +21,7 @@ export class ValidationError extends Error {
 }
 
 export class Validator {
-	static validate = (x: unknown, rule: ValidationRule, propertyPath: string = 'this', isQuery: boolean = false): any => {
+	static validate = (x: unknown, rule: ValidationRule, propertyPath: string = 'this', isQuery?: boolean): any => {
 		if (Array.isArray(rule)) {
 			for (const r of rule) {
 				try {
@@ -35,7 +35,7 @@ export class Validator {
 		return Validator.resolve(x, rule, propertyPath, isQuery);
 	};
 
-	protected static resolve(x: unknown, rule: PrimitiveRule, propertyPath: string, isQuery: boolean): any {
+	protected static resolve(x: unknown, rule: PrimitiveRule, propertyPath: string, isQuery?: boolean): any {
 		if (!rule) {
 			throw new TypeError('Rule is null or undefined');
 		}
@@ -79,12 +79,12 @@ export class Validator {
 		return x;
 	}
 
-	static boolean(x: unknown, rule: Partial<BooleanRule>, propertyPath: string): boolean {
-		if (x === true || rule.truthy?.includes(x)) {
+	static boolean(x: unknown, rule: Partial<BooleanRule>, propertyPath: string, isQuery?: boolean): boolean {
+		if (x === true || (isQuery && x === '1') || rule.truthy?.includes(x)) {
 			return true;
 		}
 
-		if (x === false || rule.falsy?.includes(x)) {
+		if (x === false || (isQuery && x === '0') || rule.falsy?.includes(x)) {
 			return false;
 		}
 
@@ -92,25 +92,27 @@ export class Validator {
 	}
 
 	static number(x: unknown, rule: Partial<NumberRule>, propertyPath: string): number {
-		if (!isFinite(x as number)) {
+		if (!isFinite(x as number) || x === '') {
 			throw new ValidationError(propertyPath, x, rule as NumberRule);
 		}
 
-		const num = +(x as number);
+		let num = +(x as number);
 
-		if (
-			(rule.integer && !Number.isInteger(num))
-			|| (Number.isFinite(rule.min!) && num < rule.min!)
-			|| (Number.isFinite(rule.max!) && num > rule.max!)
-			|| (rule.values && !rule.values.includes(num))
-		) {
-			throw new ValidationError(propertyPath, x, rule as NumberRule);
-		}
 
 		if (Number.isFinite(rule.digits!) && rule.digits! > 0) {
 			const m = 10 ** +rule.digits!;
+			const roundingFn = Math[rule.roundingFn || 'round'];
 
-			return Math[rule.roundingFn || 'round'](num * m) / m;
+			num = roundingFn(num * m) / m;
+		}
+
+		if (
+			(rule.integer && !Number.isInteger(num))
+			|| (Number.isFinite(rule.min) && num < rule.min!)
+			|| (Number.isFinite(rule.max) && num > rule.max!)
+			|| (rule.values && !rule.values.includes(num))
+		) {
+			throw new ValidationError(propertyPath, x, rule as NumberRule);
 		}
 
 		return num;
@@ -125,6 +127,16 @@ export class Validator {
 
 		let str = x as string;
 
+		if (rule.trim) {
+			str = str.trim();
+		}
+
+		if (rule.escape! > 0) {
+			for (let i = 0, len = ESCAPE_REPLACE_ARGS.length, lvl = rule.escape!; i <= lvl && i < len; i++) {
+				str = str.replace(...ESCAPE_REPLACE_ARGS[i]);
+			}
+		}
+
 		if (
 			(Number.isFinite(rule.length as number) && rule.length !== str.length)
 			|| (Number.isFinite(rule.min!) && str.length < (rule.min!))
@@ -136,27 +148,16 @@ export class Validator {
 			throw new ValidationError(propertyPath, x, rule as StringRule);
 		}
 
-		if (rule.trim) {
-			str = str.trim();
-		}
-
-		if (rule.escape! > 0) {
-			for (let i = 0, len = ESCAPE_REPLACE_ARGS.length, lvl = rule.escape!; i <= lvl && i < len; i++) {
-				str = str.replace(...ESCAPE_REPLACE_ARGS[i]);
-			}
-		}
-
 		return str as string;
 	}
 
 	static date(x: unknown, rule: Partial<DateRule>, propertyPath: string): Date {
-		const date: Date = new Date(x as Date);
+		const ts: number = +new Date(x as Date);
 
-		if (isNaN(+date)) {
+		if (isNaN(ts)) {
 			throw new ValidationError(propertyPath, x, rule as DateRule);
 		}
 
-		const ts = +date;
 		const min = +new Date(typeof rule.min === 'function' ? rule.min() : rule.min!);
 		const max = +new Date(typeof rule.max === 'function' ? rule.max() : rule.max!);
 
@@ -164,18 +165,15 @@ export class Validator {
 			throw new ValidationError(propertyPath, x, rule as DateRule);
 		}
 
-		return date;
+		return new Date(ts);
 	}
 
-	static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string, isQuery: boolean = false): any[] {
-		if (!Array.isArray(x)) {
-			throw new ValidationError(propertyPath, x, rule as ArrayRule);
-		}
-
+	static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string, isQuery?: boolean): any[] {
 		if (
-			(Number.isFinite(rule.length!) && rule.length !== x.length)
-			|| (Number.isFinite(rule.min!) && x.length < (rule.min!))
-			|| (Number.isFinite(rule.max!) && x.length > (rule.max!))
+			!Array.isArray(x)
+			|| (Number.isFinite(rule.length) && rule.length !== x.length)
+			|| (Number.isFinite(rule.min) && x.length < rule.min!)
+			|| (Number.isFinite(rule.max) && x.length > rule.max!)
 		) {
 			throw new ValidationError(propertyPath, x, rule as ArrayRule);
 		}
@@ -199,7 +197,7 @@ export class Validator {
 		return out;
 	}
 
-	static object(x: unknown, rule: Partial<ObjectRule>, propertyPath: string, isQuery: boolean = false): object {
+	static object(x: unknown, rule: Partial<ObjectRule>, propertyPath: string, isQuery?: boolean): object {
 		if (!x || typeof x !== 'object') {
 			throw new ValidationError(propertyPath, x, rule as ObjectRule);
 		}
