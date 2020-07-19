@@ -19,9 +19,11 @@ export class Application {
 					.values(imports)
 					.filter(c => typeof c === 'function' && Reflect.hasMetadata('weblimo:endpoints', c)) as ControllerType[];
 
-				options.controllers.splice(i, 1, ...controllers);
+				options.controllers[i] = controllers as any;
 			}
 		}
+
+		options.controllers = options.controllers.flat();
 
 		const application = new Application(options);
 
