@@ -239,7 +239,7 @@ export interface EndpointOptions<
 
 export type EndpointBuild = EndpointOptions & {
 	method: HttpMethod;
-	controller: new () => { [key: string]: any };
+	controller: ControllerType;
 	handler: EndpointHandler;
 	location: RegExp;
 	locationTemplate: string;

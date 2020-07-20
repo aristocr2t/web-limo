@@ -10,11 +10,11 @@ import { validate } from './validator';
 
 export class Application {
 	static async create(options: ApplicationOptions): Promise<Application> {
-		for (let i = 0, len = options.controllers.length, controller: ControllerType | string; i < len; i++) {
-			controller = options.controllers[i];
+		for (let i = 0, len = options.controllers.length, controllerOrPath: ControllerType | string; i < len; i++) {
+			controllerOrPath = options.controllers[i];
 
-			if (typeof controller === 'string') {
-				const imports = await import(controller);
+			if (typeof controllerOrPath === 'string') {
+				const imports = await import(controllerOrPath);
 				const controllers = Object
 					.values(imports)
 					.filter(c => typeof c === 'function' && Reflect.hasMetadata('weblimo:endpoints', c)) as ControllerType[];
