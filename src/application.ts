@@ -1,11 +1,25 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/prefer-nullish-coalescing */
-import { IncomingMessage, Server, ServerOptions, ServerResponse, createServer } from 'http';
+import { IncomingMessage, Server, ServerResponse, createServer } from 'http';
 import * as qs from 'querystring';
 import { inspect } from 'util';
 
-import { ControllerType, EndpointBuild, HttpMethod, InjectableOptions, MiddlewareType, ResponseHandler } from './decorators';
-import { BodyOptions, HttpException, Parsers, parseBody, parseCookie } from './utils';
+import {
+	ApplicationOptions,
+	ConstructorProvider,
+	ControllerType,
+	EndpointBuild,
+	HttpMethod,
+	InjectableOptions,
+	MiddlewareType,
+	Parsers,
+	Provider,
+	ResponseHandler,
+	UseClassProvider,
+	UseFactoryProvider,
+	UseValueProvider,
+} from './types';
+import { HttpException, parseBody, parseCookie } from './utils';
 import { validate } from './validator';
 
 export class Application {
@@ -307,53 +321,4 @@ export class Application {
 			})
 			.catch(err => this.responseHandler(res, err, undefined));
 	};
-}
-
-export interface ApplicationOptions extends ServerOptions {
-	logger?: Logger;
-	middlewares?: MiddlewareType[];
-	controllers: (ControllerType | string)[];
-	providers?: Provider[];
-	responseHandler?: ResponseHandler;
-	defaultActionCode?: number | string;
-	bodyOptions?: BodyOptions;
-	hooks?: {
-		endpointsLoad?(endpoints: EndpointBuild[]): any | PromiseLike<any>;
-	};
-	parsers?: Partial<Parsers>;
-}
-
-export type ConstructorProvider = (new (...args: any[]) => { [key: string]: any });
-
-export interface UseValueProvider {
-	provide: (new (...args: any[]) => any) | string;
-	useValue: any;
-}
-
-export interface UseClassProvider {
-	provide: (new (...args: any[]) => any) | string;
-	useClass: (new (...args: any[]) => any);
-	deps?: any[];
-	optionalDeps?: { index: number; defaultValue: any }[];
-}
-
-export interface UseFactoryProvider<D extends any[] = any[]> {
-	provide: (new (...args: any[]) => any) | string;
-	useFactory(...args: D): any;
-	deps: D;
-}
-
-export type Provider =
-| ConstructorProvider
-| UseValueProvider
-| UseClassProvider
-| UseFactoryProvider;
-
-export interface Logger {
-	log(...args: any[]): void;
-	debug(...args: any[]): void;
-	info(...args: any[]): void;
-	warn(...args: any[]): void;
-	error(...args: any[]): void;
-	dir(...args: any[]): void;
 }

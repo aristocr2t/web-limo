@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 import { inspect } from 'util';
 
+import type { ArrayRule, BooleanRule, DateRule, NumberRule, ObjectRule, PrimitiveRule, StringRule, ValidationRule } from './types';
 import { isEqual } from './utils';
 
 export const ESCAPE_REPLACE_ARGS: [string | RegExp, string][] = [
@@ -223,74 +224,3 @@ export class Validator {
 }
 
 export const { validate } = Validator;
-
-export interface ValidationSchema {
-	[key: string]: ValidationRule;
-}
-
-export type PrimitiveRule<T = any> =
-| BooleanRule<T>
-| StringRule<T>
-| NumberRule<T>
-| DateRule<T>
-| ArrayRule<T>
-| ObjectRule<T>;
-
-export type ValidationRule<T = any> =
-| PrimitiveRule<T>
-| PrimitiveRule<T>[];
-
-export interface DefaultRule<T> {
-	default?: ((x: any, r: ValidationRule) => any) | any;
-	parse?(x: any, rule: PrimitiveRule): T;
-	optional?: boolean;
-}
-
-export interface BooleanRule<T = boolean> extends DefaultRule<T> {
-	type: 'boolean';
-	truthy?: any[];
-	falsy?: any[];
-}
-
-export interface StringRule<T = string> extends DefaultRule<T> {
-	type: 'string';
-	min?: number;
-	max?: number;
-	length?: number;
-	values?: string[];
-	pattern?: string | RegExp;
-	trim?: boolean;
-	escape?: StringEscapeLevels;
-}
-
-export type StringEscapeLevels = 1 | 2;
-
-export interface NumberRule<T = number> extends DefaultRule<T> {
-	type: 'number';
-	integer?: boolean;
-	digits?: number;
-	roundingFn?: 'floor' | 'round' | 'ceil';
-	min?: number;
-	max?: number;
-	values?: number[];
-}
-
-export interface DateRule<T = Date> extends DefaultRule<T> {
-	type: 'date';
-	min?: number | string | Date | (() => number | string | Date);
-	max?: number | string | Date | (() => number | string | Date);
-}
-
-export interface ArrayRule<T = any[]> extends DefaultRule<T> {
-	type: 'array';
-	nested?: ValidationRule;
-	length?: number;
-	min?: number;
-	max?: number;
-}
-
-export interface ObjectRule<T = object> extends DefaultRule<T> {
-	type: 'object';
-	nested?: ValidationRule;
-	schema?: ValidationSchema;
-}

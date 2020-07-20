@@ -1,6 +1,6 @@
 {
 	"name": "web-limo",
-	"version": "4.3.2",
+	"version": "4.4.0",
 	"description": "node.js mvc server framework",
 	"main": "index.js",
 	"typings": "index.d.ts",
@@ -17,8 +17,8 @@
 		"formidable": "^1.2.2",
 		"http": "0.0.1-security",
 		"querystring": "^0.2.0",
-		"raw-body": "^2.4.1",
 		"reflect-metadata": "^0.1.13",
+		"unpipe": "^1.0.0",
 		"util": "^0.12.3"
 	},
 	"devDependencies": {

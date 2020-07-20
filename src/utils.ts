@@ -1,10 +1,14 @@
+/* eslint-disable @typescript-eslint/no-use-before-define */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import * as contentType from 'content-type';
 import { IncomingForm } from 'formidable';
 import type { IncomingMessage } from 'http';
 import { join as pathJoin } from 'path';
-import * as rawBody from 'raw-body';
 import type { Readable } from 'stream';
+
+import { BodyOptions, BodyType, Cookies, File, JsonData, MultipartData, MultipartOptions, Parsers, UrlencodedData } from './types';
+
+const unpipe = require('unpipe') as (stream: Readable) => void;
 
 export class HttpException extends Error {
 	constructor(readonly statusCode: number = 500, message?: string, readonly details?: any) {
@@ -57,16 +61,7 @@ export function isEqual(a: any, b: any, checkPrototype: boolean = false): boolea
 	return false;
 }
 
-export interface File {
-	size: number;
-	path: string;
-	name: string;
-	type: string;
-	lastModifiedDate?: Date;
-	hash?: string;
-}
-
-export function parseMultipart(req: IncomingMessage, options: MultipartOptions = {}): Promise<MultipartData> {
+function parseMultipart(req: IncomingMessage, options: MultipartOptions = {}): Promise<MultipartData> {
 	return new Promise<MultipartData>((resolve, reject) => {
 		if (!options.uploadDir) {
 			options.uploadDir = 'tmp';
@@ -96,6 +91,128 @@ export function parseMultipart(req: IncomingMessage, options: MultipartOptions =
 				...files,
 			});
 		});
+	});
+}
+
+function halt(stream: Readable): void {
+	unpipe(stream);
+
+	if (typeof stream.pause === 'function') {
+		stream.pause();
+	}
+}
+
+function readBody(req: IncomingMessage, encoding: string, limit?: number): Promise<string>;
+function readBody(req: IncomingMessage, encoding: undefined, limit?: number): Promise<Buffer>;
+function readBody(req: IncomingMessage, encoding?: string | undefined, limit?: number): Promise<Buffer | string> {
+	return new Promise<Buffer | string>((resolve, reject) => {
+		const contentLength = req.headers['content-length'];
+		const length = contentLength === undefined ? undefined : +contentLength;
+
+		let complete = false;
+
+		if (typeof encoding === 'string' && encoding !== 'utf-8') {
+			return reject(new HttpException(415, 'specified encoding unsupported', { encoding }));
+		}
+
+		// check the length and limit options.
+		// note: we intentionally leave the stream paused,
+		// so users should handle the stream themselves.
+		if (length! > limit!) {
+			halt(req);
+
+			return reject(new HttpException(413, 'request entity too large', {
+				expected: length,
+				limit,
+			}));
+		}
+
+		// streams1: assert request encoding is buffer.
+		// streams2+: assert the stream encoding is buffer.
+		//   stream._decoder: streams1
+		//   state.encoding: streams2
+		//   state.decoder: streams2, specifically < 0.10.6
+		const state = (req as any)._readableState;
+
+		if ((req as any)._decoder || (state && (state.encoding || state.decoder))) {
+			halt(req);
+
+			return reject(new HttpException(500, 'stream encoding should not be set', {}));
+		}
+
+		let received = 0;
+
+		const data: Buffer[] = [];
+
+		function cleanup(throwed?: boolean): void {
+			if (complete) return;
+
+			complete = true;
+
+			if (throwed) {
+				halt(req);
+			}
+
+			req.removeListener('aborted', onAborted);
+			req.removeListener('data', onData);
+			req.removeListener('end', onEnd);
+			req.removeListener('error', onEnd);
+			req.removeListener('close', cleanup);
+		}
+
+		function onAborted(): void {
+			if (complete) return;
+
+			cleanup(true);
+
+			return reject(new HttpException(400, 'request aborted', {
+				code: 'ECONNABORTED',
+				expected: length,
+				received,
+			}));
+		}
+
+		function onData(chunk: Buffer): void {
+			if (complete) return;
+
+			received += chunk.length;
+
+			if (received > limit!) {
+				cleanup(true);
+
+				return reject(new HttpException(413, 'request entity too large', {
+					limit,
+					received,
+				}));
+			}
+
+			data.push(chunk);
+		}
+
+		function onEnd(err: Error): void {
+			if (complete) return;
+
+			if (err || received !== length!) {
+				cleanup(true);
+
+				return reject(err || new HttpException(400, 'request size did not match content length', {
+					expected: length,
+					received,
+				}));
+			}
+
+			cleanup();
+
+			const buffer = Buffer.concat(data);
+
+			return resolve(typeof encoding === 'string' ? buffer.toString(encoding as 'utf-8') : buffer);
+		}
+
+		req.on('aborted', onAborted);
+		req.on('close', cleanup);
+		req.on('data', onData);
+		req.on('end', onEnd);
+		req.on('error', onEnd);
 	});
 }
 
@@ -163,11 +280,8 @@ export async function parseBody(
 
 	const { type, parameters } = contentType.parse(req);
 
-	const parseOptions: rawBody.Options = {
-		length: req.headers['content-length'],
-		encoding: parameters.charset || 'utf-8',
-		limit: options[bodyType]?.limit,
-	};
+	const limit = options[bodyType]?.limit;
+	const encoding = parameters.charset || 'utf-8';
 
 	try {
 		switch (bodyType) {
@@ -177,7 +291,7 @@ export async function parseBody(
 					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
-				const raw = await rawBody(req, parseOptions as { encoding: string });
+				const raw = await readBody(req, encoding, limit);
 
 				return parsers.json.parse(raw) as JsonData;
 			}
@@ -188,7 +302,7 @@ export async function parseBody(
 					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
-				const raw = await rawBody(req, parseOptions as { encoding: string });
+				const raw = await readBody(req, encoding, limit);
 
 				return parsers.qs.parse(raw) as UrlencodedData;
 			}
@@ -212,16 +326,14 @@ export async function parseBody(
 					throw new HttpException(400, undefined, new Error('Incorrect header "Content-Type"'));
 				}
 
-				const raw = await rawBody(req, parseOptions as { encoding: string });
+				const raw = await readBody(req, encoding, limit);
 
 				return raw;
 			}
 
 			case 'raw':
 			default: {
-				parseOptions.encoding = undefined;
-
-				const raw = await rawBody(req, parseOptions as { encoding: undefined });
+				const raw = await readBody(req, undefined, limit);
 
 				return raw;
 			}
@@ -255,47 +367,4 @@ export function parseCookie(req: IncomingMessage): Cookies {
 	}
 
 	return cookies;
-}
-
-export interface Cookies {
-	[key: string]: string | string[];
-}
-
-export type BodyType = 'urlencoded' | 'json' | 'multipart' | 'text' | 'raw' | 'stream';
-
-export interface BodyOptions extends Partial<Record<BodyType, { limit?: number | string }>> {
-	multipart?: {
-		limit?: number | string;
-	} & MultipartOptions;
-}
-
-export interface MultipartOptions {
-	encoding?: string;
-	uploadDir?: string;
-	keepExtensions?: boolean;
-	maxFileSize?: number;
-	maxFieldsSize?: number;
-	maxFields?: number;
-	hash?: string | boolean;
-	multiples?: boolean;
-	filename?(filename: string): string;
-}
-
-export type JsonData = string | number | boolean | null | { [key: string]: JsonData } | JsonData[];
-export interface UrlencodedData {
-	[key: string]: string | string[];
-}
-export interface MultipartData {
-	[key: string]: string | string[] | File;
-}
-
-export interface Parsers {
-	json: {
-		parse(text: string): any;
-		stringify(value: any): string;
-	};
-	qs: {
-		parse(text: string): any;
-		stringify(value: { [key: string]: any }): string;
-	};
 }
