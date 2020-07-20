@@ -4,7 +4,7 @@ import { IncomingMessage, Server, ServerResponse, createServer } from 'http';
 import * as qs from 'querystring';
 import { inspect } from 'util';
 
-import {
+import type {
 	ApplicationOptions,
 	ConstructorProvider,
 	ControllerType,
@@ -311,7 +311,7 @@ export class Application {
 					params,
 					headers,
 					cookies,
-				}, controller);
+				});
 
 				if (responseBody instanceof Promise) {
 					responseBody = await responseBody;

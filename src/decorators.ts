@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 import type { IncomingMessage } from 'http';
 
-import {
+import type {
 	ArrayRule,
 	BooleanRule,
 	ControllerOptions,
@@ -128,8 +128,26 @@ export function Controller(options?: ControllerOptions): ClassDecorator {
 	};
 }
 
-export function Endpoint<Options extends EndpointOptions>(options: Options): <
-	Method extends (requestData: TypedRequestData<Options>) => any | PromiseLike<any>
+export function Endpoint<
+	Options extends EndpointOptions,
+	Query = Options['query'],
+	Body = Options['body'],
+	BodyRule = Options['bodyRule'],
+	BodyType = Options['bodyType'],
+	BodyParserValue = Options['bodyParser'] extends (...args: any[]) => any ? ReturnType<Options['bodyParser']> : undefined,
+	AuthHandlerValue = Options['authHandler'] extends (...args: any[]) => any ? PromiseType<ReturnType<Options['authHandler']>> : null,
+>(options: Options): <
+	Method extends (requestData: RequestData<
+	AuthHandlerValue,
+	Query extends ValidationSchema ? Schema<Query> : any,
+	BodyType extends 'stream' ? IncomingMessage :
+		BodyType extends 'text' ? string :
+			BodyType extends 'raw' ? Buffer :
+				Body extends ValidationSchema ? BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
+					BodyRule extends PrimitiveRule[] ? SchemaProp<BodyRule[number]> :
+						BodyRule extends PrimitiveRule ? SchemaProp<BodyRule> :
+							BodyParserValue extends undefined ? any : BodyParserValue
+	>) => any | PromiseLike<any>
 >(target: { [key: string]: any }, propertyKey: string, descriptor: TypedPropertyDescriptor<Method>) => TypedPropertyDescriptor<Method> | void {
 	return (target, propertyKey, descriptor) => {
 		const targetc = target.constructor;
@@ -186,23 +204,3 @@ type Schema<B extends ValidationSchema | undefined> = {
 };
 
 type PromiseType<T> = T extends PromiseLike<any> ? Parameters<NonNullable<Parameters<T['then']>[0]>>[0] : T;
-
-type TypedRequestData<
-	Options extends EndpointOptions,
-	Query = Options['query'],
-	Body = Options['body'],
-	BodyRule = Options['bodyRule'],
-	BodyType = Options['bodyType'],
-	BodyParserValue = Options['bodyParser'] extends (...args: any[]) => any ? ReturnType<Options['bodyParser']> : undefined,
-	AuthHandlerValue = Options['authHandler'] extends (...args: any[]) => any ? PromiseType<ReturnType<Options['authHandler']>> : null,
-> = RequestData<
-AuthHandlerValue,
-Query extends ValidationSchema ? Schema<Query> : any,
-BodyType extends 'stream' ? IncomingMessage :
-	BodyType extends 'text' ? string :
-		BodyType extends 'raw' ? Buffer :
-			Body extends ValidationSchema ? BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
-				BodyRule extends PrimitiveRule[] ? SchemaProp<BodyRule[number]> :
-					BodyRule extends PrimitiveRule ? SchemaProp<BodyRule> :
-						BodyParserValue extends undefined ? any : BodyParserValue
->;

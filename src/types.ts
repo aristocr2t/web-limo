@@ -157,7 +157,7 @@ export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
 export type ContextResolver = (req: IncomingMessage, res: ServerResponse) => { [key: string]: any } | PromiseLike<{ [key: string]: any }>;
 
-export type EndpointHandler = (request: RequestData, context: { [key: string]: any }) => any | PromiseLike<any>;
+export type EndpointHandler = (request: RequestData) => any | PromiseLike<any>;
 export type AuthHandler = (req: IncomingMessage, res: ServerResponse) => any | PromiseLike<any>;
 export type ResponseHandler = (res: ServerResponse, err: Error | null, body: any) => void | PromiseLike<void>;
 export type MiddlewareType = (req: IncomingMessage, res: ServerResponse) => boolean | PromiseLike<boolean>;

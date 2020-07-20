@@ -6,7 +6,7 @@ import type { IncomingMessage } from 'http';
 import { join as pathJoin } from 'path';
 import type { Readable } from 'stream';
 
-import { BodyOptions, BodyType, Cookies, File, JsonData, MultipartData, MultipartOptions, Parsers, UrlencodedData } from './types';
+import type { BodyOptions, BodyType, Cookies, File, JsonData, MultipartData, MultipartOptions, Parsers, UrlencodedData } from './types';
 
 const unpipe = require('unpipe') as (stream: Readable) => void;
 

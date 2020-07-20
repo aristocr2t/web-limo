@@ -17,6 +17,6 @@ for (const cf of copyingFiles) {
 	copyFileSync(cf, `dist/${cf}`);
 }
 
-if (existsSync('dist/tsconfig.tsbuildinfo')) {
-	unlinkSync('dist/tsconfig.tsbuildinfo');
+if (existsSync('dist/tsconfig.build.tsbuildinfo')) {
+	unlinkSync('dist/tsconfig.build.tsbuildinfo');
 }
