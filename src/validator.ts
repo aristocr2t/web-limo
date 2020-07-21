@@ -169,11 +169,20 @@ export class Validator {
 	}
 
 	static array(x: unknown, rule: Partial<ArrayRule>, propertyPath: string, isQuery?: boolean): any[] {
+		if (!Array.isArray(x)) {
+			if (!isQuery) {
+				throw new ValidationError(propertyPath, x, rule as ArrayRule);
+			}
+
+			x = [x];
+		}
+
+		const len = (x as any[]).length;
+
 		if (
-			!Array.isArray(x)
-			|| (Number.isFinite(rule.length) && rule.length !== x.length)
-			|| (Number.isFinite(rule.min) && x.length < rule.min!)
-			|| (Number.isFinite(rule.max) && x.length > rule.max!)
+			(Number.isFinite(rule.length) && rule.length !== len)
+			|| (Number.isFinite(rule.min) && len < rule.min!)
+			|| (Number.isFinite(rule.max) && len > rule.max!)
 		) {
 			throw new ValidationError(propertyPath, x, rule as ArrayRule);
 		}
@@ -183,15 +192,15 @@ export class Validator {
 		if (rule.nested) {
 			const nestedRule = rule.nested;
 
-			for (let i = 0, len = x.length, v: any; i < len; i++) {
-				v = this.validate(x[i], nestedRule, `${propertyPath}[${i}]`, isQuery);
+			for (let i = 0, v: any; i < len; i++) {
+				v = this.validate((x as any[])[i], nestedRule, `${propertyPath}[${i}]`, isQuery);
 
 				if (v) {
 					out.push(v);
 				}
 			}
 		} else {
-			out = Array.from(x);
+			out = Array.from(x as any[]);
 		}
 
 		return out;
