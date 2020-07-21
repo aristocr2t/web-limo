@@ -271,27 +271,22 @@ export class Application {
 				let query: { [key: string]: any };
 
 				try {
-					query = validate(parsers.qs!.parse(querystring || ''), {
-						type: 'object',
-						schema: endpoint.query,
-					}, 'query', true) as { [key: string]: any };
+					query = parsers.qs!.parse(querystring || '');
+
+					if (endpoint.queryRule) {
+						query = validate(query, endpoint.queryRule, 'query', true) as { [key: string]: any };
+					}
 				} catch (err) {
 					throw new HttpException(400, undefined, err);
 				}
 
-				let body: any = await parseBody(req, endpoint.bodyType || 'json', parsers, this.options.bodyOptions!);
+				let body: any = await parseBody(req, endpoint.bodyType, parsers, this.options.bodyOptions!);
 
 				if (body !== undefined && endpoint.bodyType !== 'stream') {
 					try {
 						const isQuery = endpoint.bodyType === 'multipart' || endpoint.bodyType === 'urlencoded';
 
-						if (endpoint.body) {
-							body = validate(body, {
-								type: 'object',
-								schema: endpoint.body,
-								parse: endpoint.bodyParser,
-							}, 'body', isQuery) as any;
-						} else if (endpoint.bodyRule) {
+						if (endpoint.bodyRule) {
 							body = validate(body, endpoint.bodyRule, 'body', isQuery) as any;
 						}
 					} catch (err) {

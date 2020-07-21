@@ -64,7 +64,7 @@ export interface Cookies {
 	[key: string]: string | string[];
 }
 
-export type BodyType = 'urlencoded' | 'json' | 'multipart' | 'text' | 'raw' | 'stream';
+export type BodyType = 'none' | 'urlencoded' | 'json' | 'multipart' | 'text' | 'raw' | 'stream';
 
 export interface BodyOptions extends Partial<Record<BodyType, { limit?: number }>> {
 	multipart?: {
@@ -142,6 +142,8 @@ export type EndpointBuild = EndpointOptions & {
 	location: RegExp;
 	locationTemplate: string;
 	descriptor: PropertyDescriptor;
+	bodyType: BodyType;
+	queryRule?: ObjectRule;
 };
 
 export interface RequestData<Auth = any, Query extends {} = {}, Body = any> {

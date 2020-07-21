@@ -89,8 +89,12 @@ export function Controller(options?: ControllerOptions): ClassDecorator {
 				endpoint.method = options.method || 'GET';
 			}
 
-			if (!endpoint.bodyType && (endpoint.method === 'POST' || endpoint.method === 'PUT' || endpoint.method === 'PATCH' || endpoint.method === 'DELETE')) {
-				endpoint.bodyType = 'json';
+			if (!endpoint.bodyType) {
+				if (endpoint.bodyRule === undefined) {
+					endpoint.bodyType = 'none';
+				} else {
+					endpoint.bodyType = 'json';
+				}
 			}
 
 			if (endpoint.authHandler === undefined) {
@@ -140,30 +144,29 @@ export function Endpoint<
 	Method extends (requestData: RequestData<
 	AuthHandlerValue,
 	Query extends ValidationSchema ? Schema<Query> : any,
-	BodyType extends 'stream' ? IncomingMessage :
-		BodyType extends 'text' ? string :
-			BodyType extends 'raw' ? Buffer :
-				Body extends ValidationSchema ? BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
-					BodyRule extends PrimitiveRule[] ? SchemaProp<BodyRule[number]> :
-						BodyRule extends PrimitiveRule ? SchemaProp<BodyRule> :
-							BodyParserValue extends undefined ? any : BodyParserValue
+	BodyType extends 'none' ? undefined :
+		BodyType extends 'stream' ? IncomingMessage :
+			BodyType extends 'text' ? string :
+				BodyType extends 'raw' ? Buffer :
+					Body extends ValidationSchema ? BodyParserValue extends undefined ? Schema<Body> : BodyParserValue :
+						BodyRule extends PrimitiveRule[] ? SchemaProp<BodyRule[number]> :
+							BodyRule extends PrimitiveRule ? SchemaProp<BodyRule> :
+								BodyParserValue extends undefined ? any : BodyParserValue
 	>) => any | PromiseLike<any>
 >(target: { [key: string]: any }, propertyKey: string, descriptor: TypedPropertyDescriptor<Method>) => TypedPropertyDescriptor<Method> | void {
 	return (target, propertyKey, descriptor) => {
 		const targetc = target.constructor;
-		(options as unknown as EndpointBuild).handler = target[propertyKey as keyof typeof target];
-		(options as unknown as EndpointBuild).descriptor = descriptor;
+		const buildOptions = options as unknown as EndpointBuild;
 
-		if (options.body) {
-			const keys = Object.keys(options.body);
+		buildOptions.handler = target[propertyKey as keyof typeof target];
+		buildOptions.descriptor = descriptor;
 
-			for (const key of keys) {
-				const value = options.body[key];
+		if (buildOptions.body) {
+			buildOptions.bodyRule = { type: 'object', schema: buildOptions.body, parse: buildOptions.bodyParser };
+		}
 
-				if (Array.isArray(value)) {
-					options.body[key] = value.flat();
-				}
-			}
+		if (buildOptions.query) {
+			buildOptions.queryRule = { type: 'object', schema: buildOptions.query };
 		}
 
 		let endpoints: { [key: string]: EndpointOptions };
@@ -175,7 +178,7 @@ export function Endpoint<
 			Reflect.metadata('weblimo:endpoints', endpoints)(targetc);
 		}
 
-		endpoints[propertyKey] = options as EndpointOptions;
+		endpoints[propertyKey] = buildOptions as EndpointOptions;
 
 		return descriptor;
 	};

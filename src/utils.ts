@@ -224,6 +224,12 @@ const BodyTypes: { [key: string]: BodyType } = {
 
 export async function parseBody(
 	req: IncomingMessage,
+	bodyType: 'none',
+	parsers: Parsers,
+	options: BodyOptions,
+): Promise<undefined>;
+export async function parseBody(
+	req: IncomingMessage,
 	bodyType: 'json',
 	parsers: Parsers,
 	options: BodyOptions,
@@ -263,14 +269,14 @@ export async function parseBody(
 	bodyType: BodyType,
 	parsers: Parsers,
 	options: BodyOptions,
-): Promise<string | Buffer | JsonData | UrlencodedData | MultipartData | Readable>;
+): Promise<undefined | string | Buffer | JsonData | UrlencodedData | MultipartData | Readable>;
 export async function parseBody(
 	req: IncomingMessage,
 	bodyType: BodyType,
 	parsers: Parsers,
 	options: BodyOptions,
 ): Promise<undefined | string | Buffer | JsonData | UrlencodedData | MultipartData | Readable> {
-	if (req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH' && req.method !== 'DELETE') {
+	if (bodyType === 'none') {
 		return undefined;
 	}
 
