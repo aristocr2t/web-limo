@@ -152,6 +152,7 @@ export class Validator {
 			|| (rule.values && !rule.values.includes(str))
 			|| (typeof rule.pattern === 'string' && !str.includes(rule.pattern))
 			|| (rule.pattern instanceof RegExp && !rule.pattern.test(str))
+			|| (Array.isArray(rule.pattern) && !new RegExp(...rule.pattern).test(str))
 		) {
 			throw new ValidationError(propertyPath, x, rule as StringRule);
 		}

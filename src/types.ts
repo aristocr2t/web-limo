@@ -198,7 +198,7 @@ export interface StringRule<T = string> extends DefaultRule<T> {
 	max?: number;
 	length?: number;
 	values?: string[];
-	pattern?: string | RegExp;
+	pattern?: string | [string, string?] | RegExp;
 	trim?: boolean;
 	escape?: StringEscapeLevels;
 }
