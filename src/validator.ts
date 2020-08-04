@@ -71,7 +71,15 @@ export class Validator {
 			}
 		}
 
-		x = Validator[rule.type](x, rule as any, propertyPath, isQuery);
+		try {
+			x = Validator[rule.type](x, rule as any, propertyPath, isQuery);
+		} catch (err) {
+			if (rule.optional) {
+				return undefined;
+			}
+
+			throw err;
+		}
 
 		if (rule.parse) {
 			return rule.parse(x, rule);
